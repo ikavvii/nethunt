@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Production build outputs
+dist/
+dist-ssr/
+*.local
+
+# Database & SQLite storage
+server/data/*.db
+server/data/*.db-wal
+server/data/*.db-shm
+*.db
+*.sqlite
+
+# Environment variables
+.env
+.env.production
+.env.local
+
+# Logs & Cache
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+*.log
+
+# Editor & OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
