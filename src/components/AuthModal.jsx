@@ -175,7 +175,8 @@ export default function AuthModal({ isOpen, onClose }) {
                 onChange={(e) => setRecoverEmail(e.target.value)}
                 placeholder="e.g. alumni@psgtech.ac.in"
                 required
-                className="w-full theme-bg-surface border theme-border rounded-xl p-3.5 theme-text-primary text-sm focus:outline-none focus:border-cyan-400 font-mono shadow-inner transition-colors"
+                data-allow-paste="true"
+                className="w-full theme-bg-surface border theme-border rounded-xl p-3.5 theme-text-primary text-sm focus:outline-none focus:border-cyan-400 font-mono shadow-inner transition-colors allow-paste select-text"
                 autoFocus
               />
             </div>
@@ -190,7 +191,8 @@ export default function AuthModal({ isOpen, onClose }) {
                 onChange={(e) => setRecoverPhone(e.target.value)}
                 placeholder="e.g. 9876543210"
                 required
-                className="w-full theme-bg-surface border theme-border rounded-xl p-3.5 theme-text-primary text-sm focus:outline-none focus:border-cyan-400 font-mono shadow-inner transition-colors"
+                data-allow-paste="true"
+                className="w-full theme-bg-surface border theme-border rounded-xl p-3.5 theme-text-primary text-sm focus:outline-none focus:border-cyan-400 font-mono shadow-inner transition-colors allow-paste select-text"
               />
             </div>
 
@@ -225,7 +227,8 @@ export default function AuthModal({ isOpen, onClose }) {
                     onChange={(e) => setUsername(e.target.value)}
                     placeholder="e.g. alumni@psgtech.ac.in or 9876543210"
                     required
-                    className="w-full theme-bg-surface border theme-border rounded-xl p-3.5 theme-text-primary text-sm sm:text-base focus:outline-none focus:border-cyan-400 font-mono shadow-inner transition-colors"
+                    data-allow-paste="true"
+                    className="w-full theme-bg-surface border theme-border rounded-xl p-3.5 theme-text-primary text-sm sm:text-base focus:outline-none focus:border-cyan-400 font-mono shadow-inner transition-colors allow-paste select-text"
                     autoFocus
                   />
                 </div>
@@ -249,7 +252,8 @@ export default function AuthModal({ isOpen, onClose }) {
                     onChange={(e) => setPasskey(e.target.value)}
                     placeholder="e.g. 9876543210 or your password"
                     required
-                    className="w-full theme-bg-surface border theme-border rounded-xl p-3.5 theme-text-primary text-sm sm:text-base focus:outline-none focus:border-cyan-400 font-mono shadow-inner transition-colors"
+                    data-allow-paste="true"
+                    className="w-full theme-bg-surface border theme-border rounded-xl p-3.5 theme-text-primary text-sm sm:text-base focus:outline-none focus:border-cyan-400 font-mono shadow-inner transition-colors allow-paste select-text"
                   />
                 </div>
 
@@ -268,7 +272,8 @@ export default function AuthModal({ isOpen, onClose }) {
                   onChange={(e) => setAdminKey(e.target.value)}
                   placeholder="Admin secret passkey"
                   required
-                  className="w-full theme-bg-surface border theme-border rounded-xl p-3.5 theme-text-primary text-sm sm:text-base focus:outline-none focus:border-amber-400 font-mono shadow-inner transition-colors"
+                  data-allow-paste="true"
+                  className="w-full theme-bg-surface border theme-border rounded-xl p-3.5 theme-text-primary text-sm sm:text-base focus:outline-none focus:border-amber-400 font-mono shadow-inner transition-colors allow-paste select-text"
                   autoFocus
                 />
               </div>

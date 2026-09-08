@@ -32,9 +32,11 @@ app.get('/api/events/stream', registerSSEClient);
 app.get('/api/events/status', async (req, res) => {
   try {
     const evStatus = (await db.prepare("SELECT value FROM config WHERE key = 'event_status'").get())?.value || 'active';
-    res.json({ status: evStatus });
+    const lbRow = await db.prepare("SELECT value FROM config WHERE key = 'leaderboard_visible'").get();
+    const lbVisible = (!lbRow || lbRow.value === undefined || lbRow.value === null) ? true : (lbRow.value === 'true' || lbRow.value === '1');
+    res.json({ status: evStatus, leaderboardVisible: lbVisible });
   } catch (e) {
-    res.json({ status: 'active' });
+    res.json({ status: 'active', leaderboardVisible: true });
   }
 });
 

@@ -551,13 +551,19 @@ adminRouter.get('/config', async (req, res) => {
 });
 
 adminRouter.post('/config', async (req, res) => {
-  const { event_status, path_length, event_end_time, new_admin_key } = req.body;
+  const { event_status, path_length, event_end_time, new_admin_key, leaderboard_visible } = req.body;
   const setConfig = db.prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)');
 
   if (event_status) {
     const normStatus = (event_status === 'stopped') ? 'ended' : event_status;
     await setConfig.run('event_status', normStatus);
     broadcastEvent('EVENT_STATUS_CHANGED', { status: normStatus });
+  }
+  if (leaderboard_visible !== undefined) {
+    const isVisible = String(leaderboard_visible) === 'true' || leaderboard_visible === true;
+    const valStr = isVisible ? 'true' : 'false';
+    await setConfig.run('leaderboard_visible', valStr);
+    broadcastEvent('LEADERBOARD_VISIBILITY_CHANGED', { visible: isVisible });
   }
   if (path_length) await setConfig.run('path_length', String(path_length));
   if (event_end_time) await setConfig.run('event_end_time', String(event_end_time));

@@ -509,10 +509,62 @@ async function runRigorousTests() {
     const activeStatus = await fetch(`${BASE}/api/events/status`).then(r => r.json());
     assert(activeStatus.status === 'active', 'STATUS: Restored event status to active');
 
+    // 17: Leaderboard Visibility Toggle & Admin Preview Verification
+    console.log('\n--- Verifying Standings Leaderboard Visibility & Admin Preview ---');
+
+    // 17A: Initial status check
+    const initialEventStatus = await fetch(`${BASE}/api/events/status`).then(r => r.json());
+    assert(initialEventStatus.leaderboardVisible === true, 'LEADERBOARD: /api/events/status reports leaderboardVisible = true initially');
+
+    // 17B: Admin toggles leaderboard to hidden / frozen
+    const freezeRes = await fetch(`${BASE}/api/admin/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+      body: JSON.stringify({ leaderboard_visible: false })
+    }).then(r => r.json());
+    assert(freezeRes.success === true, 'ADMIN: Set leaderboard_visible = false via /api/admin/config');
+
+    const frozenEventStatus = await fetch(`${BASE}/api/events/status`).then(r => r.json());
+    assert(frozenEventStatus.leaderboardVisible === false, 'LEADERBOARD: /api/events/status reports leaderboardVisible = false');
+
+    // 17C: Public participant requests standings -> Masked (empty array)
+    const publicLbRes = await fetch(`${BASE}/api/leaderboard`, {
+      headers: { 'Authorization': `Bearer ${loginB.token}` }
+    }).then(r => r.json());
+    assert(publicLbRes.visible === false && Array.isArray(publicLbRes.leaderboard) && publicLbRes.leaderboard.length === 0, 'LEADERBOARD: Public participant receives empty standings array with visible = false');
+
+    const publicBatchRes = await fetch(`${BASE}/api/leaderboard/batches`, {
+      headers: { 'Authorization': `Bearer ${loginB.token}` }
+    }).then(r => r.json());
+    assert(publicBatchRes.visible === false && Array.isArray(publicBatchRes.batches) && publicBatchRes.batches.length === 0, 'LEADERBOARD: Public participant receives empty batches array with visible = false');
+
+    // 17D: Game Master requests standings -> Admin Preview (full live standings)
+    const adminLbRes = await fetch(`${BASE}/api/leaderboard`, {
+      headers: { 'Authorization': `Bearer ${adminToken}` }
+    }).then(r => r.json());
+    assert(adminLbRes.visible === false && adminLbRes.isAdminPreview === true && adminLbRes.leaderboard.length > 0, 'LEADERBOARD: Game Master receives full standings with isAdminPreview = true');
+
+    const adminBatchRes = await fetch(`${BASE}/api/leaderboard/batches`, {
+      headers: { 'Authorization': `Bearer ${adminToken}` }
+    }).then(r => r.json());
+    assert(adminBatchRes.visible === false && adminBatchRes.batches.length > 0, 'LEADERBOARD: Game Master receives full batches list during freeze');
+
+    // 17E: Admin restores leaderboard visibility to true
+    const unfreezeRes = await fetch(`${BASE}/api/admin/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+      body: JSON.stringify({ leaderboard_visible: true })
+    }).then(r => r.json());
+    assert(unfreezeRes.success === true, 'ADMIN: Restored leaderboard_visible = true');
+
+    const restoredLbRes = await fetch(`${BASE}/api/leaderboard`).then(r => r.json());
+    assert(restoredLbRes.visible === true && restoredLbRes.isAdminPreview === false && restoredLbRes.leaderboard.length > 0, 'LEADERBOARD: Public participant can view full standings again after unfreeze');
+
     // Clean up: Reset back to default in db for clean state
     await db.prepare("UPDATE config SET value = 'login2026admin' WHERE key = 'admin_key'").run();
     await db.prepare("UPDATE users SET passkey = 'login2026admin' WHERE username = 'admin'").run();
     await db.prepare("UPDATE config SET value = 'active' WHERE key = 'event_status'").run();
+    await db.prepare("UPDATE config SET value = 'true' WHERE key = 'leaderboard_visible'").run();
 
     console.log('\n================================================================');
     console.log(`  ALL CRITICAL OBJECTIVES VERIFIED: ${passed} PASSED, ${failed} FAILED`);

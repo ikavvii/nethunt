@@ -19,12 +19,16 @@ export function registerSSEClient(req, res) {
   // Send initial welcome message
   res.write(`data: ${JSON.stringify({ type: 'CONNECTED', timestamp: Date.now() })}\n\n`);
 
-  // Immediately push current event status on connection
+  // Immediately push current event status and leaderboard visibility on connection
   Promise.resolve().then(async () => {
     try {
       const row = await db.prepare("SELECT value FROM config WHERE key = 'event_status'").get();
       const status = row?.value || 'active';
       res.write(`data: ${JSON.stringify({ type: 'EVENT_STATUS_CHANGED', payload: { status }, timestamp: Date.now() })}\n\n`);
+
+      const lbRow = await db.prepare("SELECT value FROM config WHERE key = 'leaderboard_visible'").get();
+      const lbVisible = (!lbRow || lbRow.value === undefined || lbRow.value === null) ? true : (lbRow.value === 'true' || lbRow.value === '1');
+      res.write(`data: ${JSON.stringify({ type: 'LEADERBOARD_VISIBILITY_CHANGED', payload: { visible: lbVisible }, timestamp: Date.now() })}\n\n`);
     } catch (e) {}
   });
 

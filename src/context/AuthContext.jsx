@@ -7,6 +7,7 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(localStorage.getItem('nethunt_alumni_token'));
   const [loading, setLoading] = useState(true);
   const [eventStatus, setEventStatus] = useState('active');
+  const [leaderboardVisible, setLeaderboardVisible] = useState(true);
 
   const fetchProfile = async (authToken) => {
     if (!authToken) {
@@ -44,6 +45,7 @@ export function AuthProvider({ children }) {
       .then(r => r.json())
       .then(d => {
         if (d?.status) setEventStatus(d.status);
+        if (d?.leaderboardVisible !== undefined) setLeaderboardVisible(Boolean(d.leaderboardVisible));
       })
       .catch(() => {});
 
@@ -54,6 +56,9 @@ export function AuthProvider({ children }) {
         const data = JSON.parse(e.data);
         if (data.type === 'EVENT_STATUS_CHANGED' && data.payload?.status) {
           setEventStatus(data.payload.status);
+        }
+        if (data.type === 'LEADERBOARD_VISIBILITY_CHANGED' && data.payload?.visible !== undefined) {
+          setLeaderboardVisible(Boolean(data.payload.visible));
         }
       } catch (err) {}
     };
@@ -125,7 +130,9 @@ export function AuthProvider({ children }) {
       refreshUser,
       updateUser,
       eventStatus,
-      setEventStatus
+      setEventStatus,
+      leaderboardVisible,
+      setLeaderboardVisible
     }}>
       {children}
     </AuthContext.Provider>

@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 
 export default function Navbar({ activeTab, setActiveTab, onOpenAuth }) {
-  const { user, logout, eventStatus } = useAuth();
+  const { user, logout, eventStatus, leaderboardVisible } = useAuth();
   const { theme, setTheme, themes } = useTheme();
 
   const currentThemeObj = themes.find(t => t.id === theme) || themes[0];
@@ -73,6 +73,11 @@ export default function Navbar({ activeTab, setActiveTab, onOpenAuth }) {
               >
                 <BarChart2 className="w-4 h-4 text-cyan-400" />
                 <span>[ STANDINGS ]</span>
+                {!leaderboardVisible && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 hidden md:inline">
+                    FROZEN
+                  </span>
+                )}
               </button>
 
               {user?.role === 'admin' && (

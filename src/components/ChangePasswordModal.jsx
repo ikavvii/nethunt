@@ -128,7 +128,8 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
                 placeholder="Enter new password (min. 4 characters)"
                 required
                 autoFocus
-                className="w-full theme-bg-surface border theme-border rounded-xl p-3 theme-text-primary text-xs focus:outline-none focus:border-cyan-400 shadow-inner transition-colors"
+                data-allow-paste="true"
+                className="w-full theme-bg-surface border theme-border rounded-xl p-3 theme-text-primary text-xs focus:outline-none focus:border-cyan-400 shadow-inner transition-colors allow-paste select-text"
               />
             </div>
 
@@ -142,7 +143,8 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Re-enter new password"
                 required
-                className="w-full theme-bg-surface border theme-border rounded-xl p-3 theme-text-primary text-xs focus:outline-none focus:border-cyan-400 shadow-inner transition-colors"
+                data-allow-paste="true"
+                className="w-full theme-bg-surface border theme-border rounded-xl p-3 theme-text-primary text-xs focus:outline-none focus:border-cyan-400 shadow-inner transition-colors allow-paste select-text"
               />
             </div>
 

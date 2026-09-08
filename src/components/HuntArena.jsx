@@ -447,6 +447,7 @@ export default function HuntArena({ onOpenAuth }) {
                     </span>
                     <button
                       onClick={copyPayload}
+                      data-allow-copy="true"
                       title="Copy payload"
                       className="px-3 py-1.5 rounded-lg bg-cyan-950 border border-cyan-500/50 text-cyan-300 hover:bg-cyan-500 hover:text-slate-950 transition-all text-xs font-bold flex items-center space-x-1.5 cursor-pointer"
                     >
@@ -454,8 +455,11 @@ export default function HuntArena({ onOpenAuth }) {
                       <span>{copiedPayload ? 'COPIED' : 'COPY'}</span>
                     </button>
                   </div>
-                  <pre className="terminal-payload-box p-4 font-mono text-sm sm:text-base overflow-x-auto whitespace-pre-wrap leading-relaxed">
-                    <code>{node.clue_payload}</code>
+                  <pre 
+                    data-allow-copy="true"
+                    className="terminal-payload-box p-4 font-mono text-sm sm:text-base overflow-x-auto whitespace-pre-wrap leading-relaxed allow-copy select-text"
+                  >
+                    <code data-allow-copy="true" className="allow-copy select-text">{node.clue_payload}</code>
                   </pre>
                 </div>
               )}
@@ -491,6 +495,15 @@ export default function HuntArena({ onOpenAuth }) {
                     type="text"
                     value={answerInput}
                     onChange={(e) => setAnswerInput(e.target.value)}
+                    onPaste={(e) => {
+                      e.preventDefault();
+                      setFeedback({
+                        type: 'error',
+                        message: '🔒 Clipboard paste disabled. Manual character entry required in the arena.'
+                      });
+                    }}
+                    onCopy={(e) => e.preventDefault()}
+                    onCut={(e) => e.preventDefault()}
                     placeholder={
                       isPaused
                         ? "[ HUNT PAUSED - SUBMISSIONS ON HOLD ]"

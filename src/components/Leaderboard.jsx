@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Trophy, Search, Filter, RefreshCw, Award, Shield, Layers, X } from 'lucide-react';
+import { Trophy, Search, Filter, RefreshCw, Award, Shield, Layers, X, EyeOff } from 'lucide-react';
 
 export default function Leaderboard() {
-  const { user, eventStatus } = useAuth();
+  const { user, token, eventStatus, leaderboardVisible } = useAuth();
   const [leaderboard, setLeaderboard] = useState([]);
   const [batches, setBatches] = useState([]);
   const [search, setSearch] = useState('');
@@ -12,18 +12,21 @@ export default function Leaderboard() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState(null);
   const [showBatchModal, setShowBatchModal] = useState(false);
+  const [isAdminPreview, setIsAdminPreview] = useState(false);
 
   const fetchStandings = async (manual = false) => {
     try {
       if (manual) setIsRefreshing(true);
+      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
       const [lbRes, bRes] = await Promise.all([
-        fetch('/api/leaderboard'),
-        fetch('/api/leaderboard/batches')
+        fetch('/api/leaderboard', { headers }),
+        fetch('/api/leaderboard/batches', { headers })
       ]);
       const lbData = await lbRes.json();
       const bData = await bRes.json();
       setLeaderboard(lbData.leaderboard || []);
       setBatches(bData.batches || []);
+      setIsAdminPreview(Boolean(lbData.isAdminPreview));
       setLastSyncTime(new Date().toLocaleTimeString());
     } catch (e) {
       console.error(e);
@@ -38,7 +41,7 @@ export default function Leaderboard() {
     // Live dynamic updates every 3 seconds for continuous auditorium / display board streaming
     const interval = setInterval(() => fetchStandings(false), 3000);
     return () => clearInterval(interval);
-  }, []);
+  }, [token]);
 
   const filtered = leaderboard.filter(al => {
     const matchesSearch = al.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -99,133 +102,169 @@ export default function Leaderboard() {
         </div>
       </div>
 
-      {/* Filter Bar with On-Demand Batch Standings Trigger */}
-      <div className="theme-bg-card border theme-border p-4 rounded-xl flex flex-col sm:flex-row gap-3 shadow-sm items-stretch sm:items-center">
-        <div className="relative flex-1">
-          <Search className="w-5 h-5 text-cyan-600 dark:text-cyan-400 absolute left-3.5 top-3.5" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search alumni by name or handle..."
-            className="w-full pl-11 pr-4 py-3 rounded-xl theme-bg-surface border theme-border theme-text-primary text-sm font-mono focus:outline-none focus:border-cyan-400 placeholder:theme-text-muted shadow-inner"
-          />
-        </div>
-
-        <div className="flex items-center space-x-2.5">
-          {/* On-Demand Batch Standings Modal Button */}
-          <button
-            onClick={() => setShowBatchModal(true)}
-            className="px-4 py-3 rounded-xl border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-xs sm:text-sm font-mono font-bold flex items-center space-x-2 transition-all cursor-pointer shadow-sm text-amber-600 dark:text-amber-400 whitespace-nowrap"
-            title="Open batch-wise standing cards and pooled scores"
-          >
-            <Layers className="w-4 h-4 text-amber-500" />
-            <span>[ BATCH STANDINGS ({batches.length}) ]</span>
-          </button>
-
-          <div className="flex items-center space-x-2">
-            <Filter className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
-            <select
-              value={batchFilter}
-              onChange={(e) => setBatchFilter(e.target.value)}
-              className="px-4 py-3 rounded-xl theme-bg-surface border theme-border theme-text-primary text-sm focus:outline-none focus:border-cyan-400 font-mono shadow-inner cursor-pointer font-bold"
-            >
-              <option value="ALL">ALL BATCHES</option>
-              {uniqueBatches.map(b => (
-                <option key={b} value={b}>{b}</option>
-              ))}
-            </select>
+      {/* Public Standings or Frozen Mask */}
+      {(!leaderboardVisible && user?.role !== 'admin') ? (
+        <div className="theme-bg-card border border-amber-500/30 rounded-2xl p-12 text-center space-y-4 shadow-lg my-8">
+          <div className="w-16 h-16 mx-auto rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-500">
+            <EyeOff className="w-8 h-8 animate-pulse" />
+          </div>
+          <h2 className="text-xl sm:text-2xl font-mono font-black theme-text-primary tracking-wider uppercase">
+            STANDINGS TELEMETRY FROZEN
+          </h2>
+          <p className="text-sm font-mono text-amber-600 dark:text-amber-400 max-w-xl mx-auto">
+            &gt; Public scoreboards and alumni rankings have been temporarily masked by the Game Master to preserve suspense before the final reveal.
+          </p>
+          <div className="inline-flex items-center space-x-2 px-4 py-2 rounded-xl bg-slate-800/40 border theme-border font-mono text-xs theme-text-muted">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+            <span>All solve telemetry and sub-millisecond timestamps continue recording in background</span>
           </div>
         </div>
-      </div>
+      ) : (
+        <>
+          {(isAdminPreview || (!leaderboardVisible && user?.role === 'admin')) && (
+            <div className="p-4 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-600 dark:text-amber-400 font-mono text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-sm">
+              <div className="flex items-center space-x-2.5">
+                <EyeOff className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                <span className="font-bold uppercase tracking-wider">
+                  [ GAME MASTER PREVIEW ]: Public standings are currently FROZEN / HIDDEN.
+                </span>
+              </div>
+              <span className="text-[11px] opacity-85 font-semibold">
+                Only authenticated administrators can view this live telemetry.
+              </span>
+            </div>
+          )}
 
-      {/* Table */}
-      <div className="theme-bg-card border theme-border rounded-2xl overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm font-mono">
-            <thead className="theme-bg-surface theme-text-muted border-b theme-border text-xs uppercase tracking-wider font-bold">
-              <tr>
-                <th className="py-4 px-4 w-16 text-center">RANK</th>
-                <th className="py-4 px-4">ALUMNI_OPERATOR</th>
-                <th className="py-4 px-4">BATCH</th>
-                <th className="py-4 px-4 text-center">STEP</th>
-                <th className="py-4 px-4 text-center">SCORE</th>
-                <th className="py-4 px-4 text-right">LATEST_SOLVE</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y theme-border">
-              {filtered.map((al) => {
-                const isMe = user?.id === al.id;
-                return (
-                  <tr 
-                    key={al.id} 
-                    className={`transition-colors ${
-                      isMe ? 'bg-cyan-500/10 border-l-2 border-cyan-500' : 'hover:theme-bg-surface'
-                    }`}
-                  >
-                    <td className="py-3.5 px-4 text-center font-bold">
-                      {al.rank === 1 ? (
-                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-500/20 text-amber-500 border border-amber-500/50 text-sm font-black shadow-sm">1</span>
-                      ) : al.rank === 2 ? (
-                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-400/20 text-slate-600 dark:text-slate-300 border border-slate-400/50 text-sm font-black">2</span>
-                      ) : al.rank === 3 ? (
-                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-700/20 text-amber-600 dark:text-amber-500 border border-amber-700/50 text-sm font-black">3</span>
-                      ) : (
-                        <span className="theme-text-muted text-sm font-mono font-bold">#{al.rank}</span>
-                      )}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <div className="flex items-center space-x-3">
-                        <div 
-                          className="w-8 h-8 rounded-full bg-slate-800 border theme-border flex items-center justify-center text-xs font-bold theme-text-muted flex-shrink-0 font-mono"
-                        >
-                          {al.name ? al.name[0] : 'A'}
-                        </div>
-                        <div>
-                          <div className="flex items-center space-x-2">
-                            <span className={`text-sm sm:text-base font-bold ${isMe ? 'theme-label-cyan' : 'theme-text-primary'}`}>
-                              {al.name}
-                            </span>
-                            {isMe && (
-                              <span className="text-[11px] bg-cyan-500 text-slate-950 font-bold px-2 py-0.5 rounded font-mono shadow-sm">
-                                YOU
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center space-x-2 text-xs font-mono mt-0.5">
-                            <span className="theme-label-cyan">@{al.username}</span>
-                            {al.organization && (
-                              <span className="text-xs px-2 py-0.5 rounded border theme-border theme-text-secondary bg-slate-800/20 font-sans">
-                                {al.organization}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4 font-bold text-sm sm:text-base theme-label-cyan font-mono">
-                      {al.batch}
-                    </td>
-                    <td className="py-3.5 px-4 text-center font-bold text-xs sm:text-sm theme-metric-value">
-                      STEP {al.current_step}
-                    </td>
-                    <td className="py-3.5 px-4 text-center font-black text-base sm:text-lg theme-metric-value">
-                      {al.score}
-                    </td>
-                    <td className="py-3.5 px-4 text-right text-xs font-mono theme-text-muted">
-                      {al.last_solved_subms > 0 ? (
-                        new Date(al.last_solved_subms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-                      ) : (
-                        "—"
-                      )}
-                    </td>
+          {/* Filter Bar with On-Demand Batch Standings Trigger */}
+          <div className="theme-bg-card border theme-border p-4 rounded-xl flex flex-col sm:flex-row gap-3 shadow-sm items-stretch sm:items-center">
+            <div className="relative flex-1">
+              <Search className="w-5 h-5 text-cyan-600 dark:text-cyan-400 absolute left-3.5 top-3.5" />
+              <input
+                type="text"
+                data-allow-paste="true"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search alumni by name or handle..."
+                className="w-full pl-11 pr-4 py-3 rounded-xl theme-bg-surface border theme-border theme-text-primary text-sm font-mono focus:outline-none focus:border-cyan-400 placeholder:theme-text-muted shadow-inner allow-paste select-text"
+              />
+            </div>
+
+            <div className="flex items-center space-x-2.5">
+              {/* On-Demand Batch Standings Modal Button */}
+              <button
+                onClick={() => setShowBatchModal(true)}
+                className="px-4 py-3 rounded-xl border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-xs sm:text-sm font-mono font-bold flex items-center space-x-2 transition-all cursor-pointer shadow-sm text-amber-600 dark:text-amber-400 whitespace-nowrap"
+                title="Open batch-wise standing cards and pooled scores"
+              >
+                <Layers className="w-4 h-4 text-amber-500" />
+                <span>[ BATCH STANDINGS ({batches.length}) ]</span>
+              </button>
+
+              <div className="flex items-center space-x-2">
+                <Filter className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
+                <select
+                  value={batchFilter}
+                  onChange={(e) => setBatchFilter(e.target.value)}
+                  className="px-4 py-3 rounded-xl theme-bg-surface border theme-border theme-text-primary text-sm focus:outline-none focus:border-cyan-400 font-mono shadow-inner cursor-pointer font-bold"
+                >
+                  <option value="ALL">ALL BATCHES</option>
+                  {uniqueBatches.map(b => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="theme-bg-card border theme-border rounded-2xl overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm font-mono">
+                <thead className="theme-bg-surface theme-text-muted border-b theme-border text-xs uppercase tracking-wider font-bold">
+                  <tr>
+                    <th className="py-4 px-4 w-16 text-center">RANK</th>
+                    <th className="py-4 px-4">ALUMNI_OPERATOR</th>
+                    <th className="py-4 px-4">BATCH</th>
+                    <th className="py-4 px-4 text-center">STEP</th>
+                    <th className="py-4 px-4 text-center">SCORE</th>
+                    <th className="py-4 px-4 text-right">LATEST_SOLVE</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                </thead>
+                <tbody className="divide-y theme-border">
+                  {filtered.map((al) => {
+                    const isMe = user?.id === al.id;
+                    return (
+                      <tr 
+                        key={al.id} 
+                        className={`transition-colors ${
+                          isMe ? 'bg-cyan-500/10 border-l-2 border-cyan-500' : 'hover:theme-bg-surface'
+                        }`}
+                      >
+                        <td className="py-3.5 px-4 text-center font-bold">
+                          {al.rank === 1 ? (
+                            <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-500/20 text-amber-500 border border-amber-500/50 text-sm font-black shadow-sm">1</span>
+                          ) : al.rank === 2 ? (
+                            <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-400/20 text-slate-600 dark:text-slate-300 border border-slate-400/50 text-sm font-black">2</span>
+                          ) : al.rank === 3 ? (
+                            <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-700/20 text-amber-600 dark:text-amber-500 border border-amber-700/50 text-sm font-black">3</span>
+                          ) : (
+                            <span className="theme-text-muted text-sm font-mono font-bold">#{al.rank}</span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center space-x-3">
+                            <div 
+                              className="w-8 h-8 rounded-full bg-slate-800 border theme-border flex items-center justify-center text-xs font-bold theme-text-muted flex-shrink-0 font-mono"
+                            >
+                              {al.name ? al.name[0] : 'A'}
+                            </div>
+                            <div>
+                              <div className="flex items-center space-x-2">
+                                <span className={`text-sm sm:text-base font-bold ${isMe ? 'theme-label-cyan' : 'theme-text-primary'}`}>
+                                  {al.name}
+                                </span>
+                                {isMe && (
+                                  <span className="text-[11px] bg-cyan-500 text-slate-950 font-bold px-2 py-0.5 rounded font-mono shadow-sm">
+                                    YOU
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center space-x-2 text-xs font-mono mt-0.5">
+                                <span className="theme-label-cyan">@{al.username}</span>
+                                {al.organization && (
+                                  <span className="text-xs px-2 py-0.5 rounded border theme-border theme-text-secondary bg-slate-800/20 font-sans">
+                                    {al.organization}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 font-bold text-sm sm:text-base theme-label-cyan font-mono">
+                          {al.batch}
+                        </td>
+                        <td className="py-3.5 px-4 text-center font-bold text-xs sm:text-sm theme-metric-value">
+                          STEP {al.current_step}
+                        </td>
+                        <td className="py-3.5 px-4 text-center font-black text-base sm:text-lg theme-metric-value">
+                          {al.score}
+                        </td>
+                        <td className="py-3.5 px-4 text-right text-xs font-mono theme-text-muted">
+                          {al.last_solved_subms > 0 ? (
+                            new Date(al.last_solved_subms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Batch-wise Standings On-Demand Modal (Listing ALL Batches) */}
       {showBatchModal && (

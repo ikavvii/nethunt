@@ -24,6 +24,7 @@ import {
   Terminal,
   Check,
   Eye,
+  EyeOff,
   Filter,
   Server,
   Palette,
@@ -506,6 +507,24 @@ export default function AdminDashboard() {
     } catch (e) {}
   };
 
+  const handleToggleLeaderboard = async () => {
+    const isCurrentlyVisible = config.leaderboard_visible !== 'false';
+    const nextState = isCurrentlyVisible ? 'false' : 'true';
+    try {
+      await fetch('/api/admin/config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ leaderboard_visible: nextState })
+      });
+      setConfig(prev => ({ ...prev, leaderboard_visible: nextState }));
+    } catch (e) {
+      alert(`Failed to toggle leaderboard: ${e.message}`);
+    }
+  };
+
   if (user?.role !== 'admin') {
     return (
       <div className="max-w-md mx-auto py-24 text-center">
@@ -530,35 +549,60 @@ export default function AdminDashboard() {
           </p>
         </div>
 
-        {/* Event State Controls */}
-        <div className="flex items-center space-x-2 theme-bg-surface p-1.5 rounded-xl border theme-border">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Standings Visibility 1-Click Quick Toggle */}
           <button
-            onClick={() => handleSetStatus('active')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center space-x-1 transition-all ${
-              config.event_status === 'active' ? 'bg-emerald-500 text-slate-950 shadow-sm' : 'theme-text-muted'
+            onClick={handleToggleLeaderboard}
+            className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold flex items-center space-x-2 border transition-all cursor-pointer shadow-sm ${
+              config.leaderboard_visible !== 'false'
+                ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-600 dark:text-emerald-300 hover:bg-emerald-500/25'
+                : 'bg-amber-500/20 border-amber-500/50 text-amber-600 dark:text-amber-300 hover:bg-amber-500/30 ring-1 ring-amber-500/30'
             }`}
+            title="Toggle public standings leaderboard visibility for participants"
           >
-            <Play className="w-3.5 h-3.5" />
-            <span>ACTIVE</span>
+            {config.leaderboard_visible !== 'false' ? (
+              <>
+                <Eye className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                <span>[ STANDINGS: PUBLIC ]</span>
+              </>
+            ) : (
+              <>
+                <EyeOff className="w-4 h-4 text-amber-500 animate-pulse flex-shrink-0" />
+                <span>[ STANDINGS: FROZEN / HIDDEN ]</span>
+              </>
+            )}
           </button>
-          <button
-            onClick={() => handleSetStatus('paused')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center space-x-1 transition-all ${
-              config.event_status === 'paused' ? 'bg-amber-500 text-slate-950 shadow-sm' : 'theme-text-muted'
-            }`}
-          >
-            <Pause className="w-3.5 h-3.5" />
-            <span>PAUSED</span>
-          </button>
-          <button
-            onClick={() => handleSetStatus('ended')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center space-x-1 transition-all ${
-              config.event_status === 'ended' ? 'bg-rose-500 text-slate-950 shadow-sm' : 'theme-text-muted'
-            }`}
-          >
-            <Square className="w-3.5 h-3.5" />
-            <span>ENDED</span>
-          </button>
+
+          {/* Event State Controls */}
+          <div className="flex items-center space-x-2 theme-bg-surface p-1.5 rounded-xl border theme-border">
+            <button
+              onClick={() => handleSetStatus('active')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center space-x-1 transition-all cursor-pointer ${
+                config.event_status === 'active' ? 'bg-emerald-500 text-slate-950 shadow-sm' : 'theme-text-muted'
+              }`}
+            >
+              <Play className="w-3.5 h-3.5" />
+              <span>ACTIVE</span>
+            </button>
+            <button
+              onClick={() => handleSetStatus('paused')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center space-x-1 transition-all cursor-pointer ${
+                config.event_status === 'paused' ? 'bg-amber-500 text-slate-950 shadow-sm' : 'theme-text-muted'
+              }`}
+            >
+              <Pause className="w-3.5 h-3.5" />
+              <span>PAUSED</span>
+            </button>
+            <button
+              onClick={() => handleSetStatus('ended')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center space-x-1 transition-all cursor-pointer ${
+                config.event_status === 'ended' ? 'bg-rose-500 text-slate-950 shadow-sm' : 'theme-text-muted'
+              }`}
+            >
+              <Square className="w-3.5 h-3.5" />
+              <span>ENDED</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1680,6 +1724,68 @@ export default function AdminDashboard() {
                   Sliding-window rate limit (5 attempts / 60s) active with sub-millisecond tie breaking. Leaderboard cached in-memory.
                 </p>
               </div>
+            </div>
+          </div>
+
+          {/* Standings Leaderboard Visibility & Freeze Control */}
+          <div className="theme-bg-card border theme-border p-6 rounded-2xl shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center space-x-2">
+                  {config.leaderboard_visible !== 'false' ? (
+                    <Eye className="w-5 h-5 text-emerald-500" />
+                  ) : (
+                    <EyeOff className="w-5 h-5 text-amber-500 animate-pulse" />
+                  )}
+                  <h3 className="font-bold text-base theme-text-primary">
+                    Public Standings &amp; Leaderboard Visibility
+                  </h3>
+                </div>
+                <p className="text-xs theme-text-muted mt-1 font-mono">
+                  Freeze or hide live alumni rankings and telemetry from public view (e.g., during final competition hours for suspense).
+                </p>
+              </div>
+
+              <button
+                onClick={handleToggleLeaderboard}
+                className={`px-5 py-2.5 rounded-xl font-mono text-xs font-bold uppercase transition-all cursor-pointer shadow-sm flex items-center space-x-2 ${
+                  config.leaderboard_visible !== 'false'
+                    ? 'bg-amber-500 hover:bg-amber-400 text-slate-950'
+                    : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
+                }`}
+              >
+                {config.leaderboard_visible !== 'false' ? (
+                  <>
+                    <EyeOff className="w-4 h-4" />
+                    <span>[ FREEZE / HIDE STANDINGS ]</span>
+                  </>
+                ) : (
+                  <>
+                    <Eye className="w-4 h-4" />
+                    <span>[ UNFREEZE / PUBLISH STANDINGS ]</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-xl theme-bg-surface border theme-border text-xs font-mono theme-text-secondary leading-relaxed space-y-1.5">
+              <div className="flex items-center space-x-2 font-bold">
+                <span className="theme-text-primary">CURRENT VISIBILITY STATE:</span>
+                {config.leaderboard_visible !== 'false' ? (
+                  <span className="text-emerald-500 flex items-center space-x-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>PUBLIC (Live to all participants &amp; auditorium displays)</span>
+                  </span>
+                ) : (
+                  <span className="text-amber-500 flex items-center space-x-1">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                    <span>FROZEN / HIDDEN (Masked for participants; admins retain live preview)</span>
+                  </span>
+                )}
+              </div>
+              <p className="theme-text-muted text-[11px]">
+                &gt; When hidden, participants receive an empty standings list and holding banner. All background telemetry, solves, and scores continue recording uninterrupted.
+              </p>
             </div>
           </div>
 

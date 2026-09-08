@@ -7,12 +7,16 @@ import Leaderboard from './components/Leaderboard';
 import AdminDashboard from './components/AdminDashboard';
 import AuthModal from './components/AuthModal';
 import ChangePasswordModal from './components/ChangePasswordModal';
+import { useClipboardGuard } from './utils/useClipboardGuard';
 
 function MainLayout() {
   const [activeTab, setActiveTab] = useState('hunt');
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [changePasswordModalOpen, setChangePasswordModalOpen] = useState(false);
   const { user } = useAuth();
+
+  // Enforce global clipboard protection (disabled everywhere, enabled only in designated areas)
+  useClipboardGuard(user);
 
   useEffect(() => {
     if (user && user.role !== 'admin' && (user.password_changed === 0 || user.mustChangePassword)) {
@@ -23,7 +27,7 @@ function MainLayout() {
   }, [user]);
 
   return (
-    <div className="min-h-screen flex flex-col justify-between theme-bg-page theme-text-primary transition-colors">
+    <div className="min-h-screen flex flex-col justify-between theme-bg-page theme-text-primary transition-colors select-none">
       <div>
         <Navbar 
           activeTab={activeTab} 
@@ -41,7 +45,9 @@ function MainLayout() {
             <Leaderboard />
           )}
           {activeTab === 'admin' && (
-            <AdminDashboard />
+            <div className="admin-dashboard-container">
+              <AdminDashboard />
+            </div>
           )}
         </main>
       </div>

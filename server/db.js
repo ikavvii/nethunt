@@ -276,6 +276,9 @@ async function seedSystem() {
     await setConfig.run('event_end_time', String(Date.now() + 48 * 60 * 60 * 1000));
   }
 
+  const lbVisible = await getConfig.get('leaderboard_visible');
+  if (!lbVisible) await setConfig.run('leaderboard_visible', 'true');
+
   // Admin user
   const adminUser = await db.prepare("SELECT id FROM users WHERE username = 'admin'").get();
   if (!adminUser) {
