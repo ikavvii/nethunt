@@ -44,7 +44,7 @@ export default function Navbar({ activeTab, setActiveTab, onOpenAuth }) {
                   </span>
                 </div>
                 <p className="text-[10px] theme-text-muted font-mono tracking-widest uppercase">
-                  PSG COLLEGE OF TECHNOLOGY
+                  PSG COLLEGE OF TECHNOLOGY • 11–17 AUG 2026
                 </p>
               </div>
             </div>

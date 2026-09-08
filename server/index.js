@@ -34,9 +34,23 @@ app.get('/api/events/status', async (req, res) => {
     const evStatus = (await db.prepare("SELECT value FROM config WHERE key = 'event_status'").get())?.value || 'active';
     const lbRow = await db.prepare("SELECT value FROM config WHERE key = 'leaderboard_visible'").get();
     const lbVisible = (!lbRow || lbRow.value === undefined || lbRow.value === null) ? true : (lbRow.value === 'true' || lbRow.value === '1');
-    res.json({ status: evStatus, leaderboardVisible: lbVisible });
+    const startDate = (await db.prepare("SELECT value FROM config WHERE key = 'event_start_date'").get())?.value || '2026-08-11T00:00:00+05:30';
+    const endDate = (await db.prepare("SELECT value FROM config WHERE key = 'event_end_date'").get())?.value || '2026-08-17T23:59:59+05:30';
+    res.json({ 
+      status: evStatus, 
+      leaderboardVisible: lbVisible,
+      eventStartDate: startDate,
+      eventEndDate: endDate,
+      eventWindow: '11th Aug 2026 – 17th Aug 2026'
+    });
   } catch (e) {
-    res.json({ status: 'active', leaderboardVisible: true });
+    res.json({ 
+      status: 'active', 
+      leaderboardVisible: true,
+      eventStartDate: '2026-08-11T00:00:00+05:30',
+      eventEndDate: '2026-08-17T23:59:59+05:30',
+      eventWindow: '11th Aug 2026 – 17th Aug 2026'
+    });
   }
 });
 

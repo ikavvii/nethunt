@@ -46,9 +46,36 @@ function normalizeAnswer(str) {
     .replace(/\s+/g, ' ');
 }
 
+function isMobileOrTabletUserAgent(ua) {
+  if (!ua || typeof ua !== 'string') return false;
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|mobile|CriOS|FxiOS|Tablet/i.test(ua);
+}
+
+async function checkAndEnforceDesktopDevice(req, res, user) {
+  const userAgent = req.headers['user-agent'] || '';
+  if (user && user.role !== 'admin' && isMobileOrTabletUserAgent(userAgent)) {
+    try {
+      await db.prepare(`
+        INSERT INTO proctor_logs (user_id, event_type, step_index, timestamp, metadata)
+        VALUES (?, 'MOBILE_DEVICE_BLOCKED', ?, ?, ?)
+      `).run(user.id, user.current_step || 0, Date.now(), JSON.stringify({ userAgent, path: req.path }));
+      await db.prepare('UPDATE users SET tab_violations = tab_violations + 1 WHERE id = ?').run(user.id);
+    } catch (e) {}
+
+    res.status(403).json({
+      error: 'Device blocked: LOGIN 2026 test integrity requires a desktop or laptop environment.',
+      deviceBlocked: true,
+      requiresDesktop: true
+    });
+    return false;
+  }
+  return true;
+}
+
 // GET Current Assigned Node (ZERO CLIENT-SIDE CLUE LEAKS)
 huntRouter.get('/current-node', requireAuth, async (req, res) => {
   const user = req.user;
+  if (!(await checkAndEnforceDesktopDevice(req, res, user))) return;
 
   let path = [];
   try { path = JSON.parse(user.assigned_path_json || '[]'); } catch (e) {}
@@ -138,6 +165,8 @@ huntRouter.get('/current-node', requireAuth, async (req, res) => {
 // POST Submit Answer with Sliding Window Rate Limit & Sub-Millisecond Tie Breaking
 huntRouter.post('/submit', requireAuth, async (req, res) => {
   const user = req.user;
+  if (!(await checkAndEnforceDesktopDevice(req, res, user))) return;
+
   const { answer } = req.body;
 
   const eventStatus = (await db.prepare("SELECT value FROM config WHERE key = 'event_status'").get())?.value || 'active';
@@ -282,6 +311,7 @@ huntRouter.post('/submit', requireAuth, async (req, res) => {
 // POST Unlock Progressive Hint (Zero leak: Returns only the single newly unlocked hint)
 huntRouter.post('/unlock-hint', requireAuth, async (req, res) => {
   const user = req.user;
+  if (!(await checkAndEnforceDesktopDevice(req, res, user))) return;
 
   const eventStatus = (await db.prepare("SELECT value FROM config WHERE key = 'event_status'").get())?.value || 'active';
   if (eventStatus === 'paused') {

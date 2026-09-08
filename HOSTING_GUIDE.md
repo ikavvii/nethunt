@@ -1,6 +1,6 @@
 # 🌐 LOGIN 2026 NETHUNT — COMPREHENSIVE HOSTING & DEPLOYMENT GUIDE
 **PSG College of Technology &bull; Department of Computer Applications (MCA)**  
-*Cryptic Nethunt Platform for Alumni &bull; 48-Hour High-Concurrency Competition System*
+*Cryptic Nethunt Platform for Alumni &bull; 11th Aug 2026 – 17th Aug 2026 Competition System*
 
 ---
 
@@ -210,7 +210,7 @@ If you are hosting the competition exclusively within the **PSG College of Techn
 
 ---
 
-## 💾 Database Backups During the 48-Hour Live Event
+## 💾 Database Backups During the Live Event (11th–17th Aug 2026)
 
 SQLite WAL mode allows zero-downtime hot backups while participants are actively playing.
 

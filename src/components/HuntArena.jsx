@@ -24,6 +24,8 @@ import {
   X
 } from 'lucide-react';
 import { useProctorGuard } from '../utils/useProctorGuard';
+import { useDeviceGuard } from '../utils/deviceGuard';
+import DeviceBlockedScreen from './DeviceBlockedScreen';
 
 export default function HuntArena({ onOpenAuth }) {
   const { user, token, refreshUser, eventStatus: authEventStatus, setEventStatus } = useAuth();
@@ -42,6 +44,11 @@ export default function HuntArena({ onOpenAuth }) {
   const [proctorViolations, setProctorViolations] = useState(user?.tab_violations || 0);
   const [activeProctorAlert, setActiveProctorAlert] = useState(null);
   const alertTimerRef = useRef(null);
+
+  // Device Integrity Guard (Restricted to Laptop & Desktop only)
+  const deviceStatus = useDeviceGuard();
+  const [adminDeviceBypass, setAdminDeviceBypass] = useState(false);
+  const isDeviceBlocked = !deviceStatus.isAllowed && (user?.role !== 'admin' || !adminDeviceBypass);
 
   const inputRef = useRef(null);
 
@@ -277,6 +284,17 @@ export default function HuntArena({ onOpenAuth }) {
     }
   };
 
+  // Strict Device Integrity Enforcement: Laptop or Desktop environment required
+  if (isDeviceBlocked) {
+    return (
+      <DeviceBlockedScreen 
+        deviceInfo={deviceStatus} 
+        isAdmin={user?.role === 'admin'} 
+        onAdminBypass={() => setAdminDeviceBypass(true)} 
+      />
+    );
+  }
+
   if (!user) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-16 sm:py-24 flex flex-col items-center justify-center text-center">
@@ -292,7 +310,7 @@ export default function HuntArena({ onOpenAuth }) {
         {/* Centered High-Contrast Badge */}
         <div className="inline-flex items-center space-x-2.5 px-4 py-1.5 rounded-full border border-sky-500/40 bg-sky-100 dark:bg-cyan-950/60 text-sky-950 dark:text-cyan-300 font-mono text-xs sm:text-sm font-bold shadow-sm mb-6">
           <span className="w-2.5 h-2.5 rounded-full bg-cyan-500 animate-ping" />
-          <span className="tracking-wider">48-HOUR MCA ALUMNI CRYPTIC ODYSSEY</span>
+          <span className="tracking-wider">EVENT WINDOW: 11TH AUG 2026 – 17TH AUG 2026 // MCA ALUMNI CRYPTIC ODYSSEY</span>
         </div>
 
         {/* High-Contrast Centered Heading */}
@@ -303,7 +321,7 @@ export default function HuntArena({ onOpenAuth }) {
         {/* Larger, High-Contrast Description */}
         <p className="theme-text-primary text-base sm:text-lg lg:text-xl font-mono max-w-2xl mx-auto mb-10 leading-relaxed opacity-95">
           Autonomous progressive cryptic puzzle arena exclusively for MCA Alumni of PSG College of Technology.
-          Brute-force protected • 7-stage progressive clue decay • Zero client-side leaks.
+          Active from 11th Aug 2026 to 17th Aug 2026 • Desktop &amp; Laptop environments only.
         </p>
 
         {/* Prominent CTA */}

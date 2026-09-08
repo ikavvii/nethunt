@@ -28,6 +28,8 @@ import {
   EyeOff,
   Filter,
   Server,
+  Smartphone,
+  Laptop,
   Palette,
   Copy,
   BookOpen,
@@ -1382,6 +1384,13 @@ export default function AdminDashboard() {
                   <span>COPY_BLOCKED</span>
                 </span>
               );
+            case 'MOBILE_DEVICE_BLOCKED':
+              return (
+                <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/50">
+                  <Smartphone className="w-3 h-3 flex-shrink-0" />
+                  <span>MOBILE_BLOCKED</span>
+                </span>
+              );
             default:
               return (
                 <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-800 text-slate-300 border theme-border">
@@ -1398,6 +1407,7 @@ export default function AdminDashboard() {
           if (typeof meta === 'string') {
             try { obj = JSON.parse(meta); } catch (e) { return meta; }
           }
+          if (obj.userAgent) return `Device Blocked: ${obj.userAgent.slice(0, 45)}...`;
           if (obj.reason) return obj.reason;
           if (obj.combo) return `Shortcut Pressed: ${obj.combo}`;
           if (obj.target) return `Field: ${obj.target}`;
@@ -1464,6 +1474,7 @@ export default function AdminDashboard() {
                     <option value="DEVTOOLS_SHORTCUT">DEVTOOLS_SHORTCUT</option>
                     <option value="CLIPBOARD_PASTE_ATTEMPT">CLIPBOARD_PASTE_ATTEMPT</option>
                     <option value="CLIPBOARD_COPY_ATTEMPT">CLIPBOARD_COPY_ATTEMPT</option>
+                    <option value="MOBILE_DEVICE_BLOCKED">MOBILE_DEVICE_BLOCKED</option>
                   </select>
                 </div>
 
@@ -2024,9 +2035,9 @@ export default function AdminDashboard() {
               </div>
 
               <div className="border-t theme-border pt-3">
-                <label className="block theme-text-secondary mb-1">&gt; 48-HOUR AUTOMATED COMPETITION WINDOW</label>
+                <label className="block theme-text-secondary mb-1">&gt; EVENT WINDOW: 11TH AUG 2026 – 17TH AUG 2026</label>
                 <p className="theme-text-muted text-[11px] leading-relaxed">
-                  Sliding-window rate limit (5 attempts / 60s) active with sub-millisecond tie breaking. Leaderboard cached in-memory.
+                  Official 7-day competition schedule. Sliding-window rate limit (5 attempts / 60s) active with sub-millisecond tie breaking. Leaderboard cached in-memory.
                 </p>
               </div>
             </div>

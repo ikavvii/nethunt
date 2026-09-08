@@ -639,6 +639,50 @@ async function runRigorousTests() {
     const clearedUser = await db.prepare('SELECT tab_violations FROM users WHERE id = ?').get(loginB.user.id);
     assert(clearedUser.tab_violations === 0, 'ADMIN PROCTOR: Database confirms alumnus tab_violations is now 0');
 
+    console.log('\n--- Verifying Event Window (11-17 Aug) & Desktop-Only Device Enforcement ---');
+    // 19A: Verify Event Status endpoint returns official 11th Aug - 17th Aug 2026 window
+    const evStatusRes = await fetch(`${BASE}/api/events/status`).then(r => r.json());
+    assert(evStatusRes.eventWindow === '11th Aug 2026 – 17th Aug 2026', 'EVENT WINDOW: /api/events/status reports 11th Aug 2026 – 17th Aug 2026');
+    assert(evStatusRes.eventStartDate === '2026-08-11T00:00:00+05:30', 'EVENT WINDOW: Start date is 2026-08-11T00:00:00+05:30');
+    assert(evStatusRes.eventEndDate === '2026-08-17T23:59:59+05:30', 'EVENT WINDOW: End date is 2026-08-17T23:59:59+05:30');
+
+    // 19B: Mobile device blocking on current-node endpoint
+    const mobileUA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1';
+    const mobileCurrentNode = await fetch(`${BASE}/api/hunt/current-node`, {
+      headers: {
+        'Authorization': `Bearer ${loginB.token}`,
+        'User-Agent': mobileUA
+      }
+    });
+    assert(mobileCurrentNode.status === 403, 'DEVICE INTEGRITY: Mobile iPhone blocked on /current-node with HTTP 403');
+    const mobileNodeJson = await mobileCurrentNode.json();
+    assert(mobileNodeJson.deviceBlocked === true, 'DEVICE INTEGRITY: Response flags deviceBlocked = true');
+
+    // 19C: Mobile device blocking on submit endpoint
+    const mobileSubmit = await fetch(`${BASE}/api/hunt/submit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${loginB.token}`,
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36'
+      },
+      body: JSON.stringify({ answer: 'test' })
+    });
+    assert(mobileSubmit.status === 403, 'DEVICE INTEGRITY: Mobile Android blocked on /submit with HTTP 403');
+
+    // 19D: Verify MOBILE_DEVICE_BLOCKED logged in proctor logs
+    const mobileLog = await db.prepare("SELECT * FROM proctor_logs WHERE event_type = 'MOBILE_DEVICE_BLOCKED'").get();
+    assert(mobileLog && mobileLog.event_type === 'MOBILE_DEVICE_BLOCKED', 'PROCTOR LOG: MOBILE_DEVICE_BLOCKED recorded in database');
+
+    // 19E: Admin mobile bypass: Admin is exempt from device block
+    const adminMobileCurrentNode = await fetch(`${BASE}/api/hunt/current-node`, {
+      headers: {
+        'Authorization': `Bearer ${adminToken}`,
+        'User-Agent': mobileUA
+      }
+    });
+    assert(adminMobileCurrentNode.status !== 403, 'DEVICE INTEGRITY: Game Master admin exempt from mobile device block');
+
     // Clean up: Reset back to default in db for clean state
     await db.prepare("UPDATE config SET value = 'login2026admin' WHERE key = 'admin_key'").run();
     await db.prepare("UPDATE users SET passkey = 'login2026admin' WHERE username = 'admin'").run();

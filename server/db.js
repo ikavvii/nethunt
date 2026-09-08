@@ -271,9 +271,15 @@ async function seedSystem() {
   // Level up default trajectory to 20 nodes
   await setConfig.run('path_length', '20');
 
+  const evStartDate = await getConfig.get('event_start_date');
+  if (!evStartDate) await setConfig.run('event_start_date', '2026-08-11T00:00:00+05:30');
+
+  const evEndDate = await getConfig.get('event_end_date');
+  if (!evEndDate) await setConfig.run('event_end_date', '2026-08-17T23:59:59+05:30');
+
   const evEndTime = await getConfig.get('event_end_time');
   if (!evEndTime) {
-    await setConfig.run('event_end_time', String(Date.now() + 48 * 60 * 60 * 1000));
+    await setConfig.run('event_end_time', String(new Date('2026-08-17T23:59:59+05:30').getTime()));
   }
 
   const lbVisible = await getConfig.get('leaderboard_visible');

@@ -94,7 +94,7 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
             &gt; SET YOUR ACCOUNT PASSWORD
           </h3>
           <p className="text-[11px] theme-text-muted font-mono mt-1 leading-relaxed">
-            Welcome, <span className="font-bold theme-text-primary">{user.name}</span>! For your account security during the 48-hour event, please replace your default phone password with a personal password.
+            Welcome, <span className="font-bold theme-text-primary">{user.name}</span>! For your account security during the event (11th Aug – 17th Aug 2026), please replace your default phone password with a personal password.
           </p>
         </div>
 
