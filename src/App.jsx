@@ -10,10 +10,17 @@ import ChangePasswordModal from './components/ChangePasswordModal';
 import { useClipboardGuard } from './utils/useClipboardGuard';
 
 function MainLayout() {
-  const [activeTab, setActiveTab] = useState('hunt');
+  const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState(user?.role === 'admin' ? 'admin' : 'hunt');
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [changePasswordModalOpen, setChangePasswordModalOpen] = useState(false);
-  const { user } = useAuth();
+
+  // Auto-switch to admin panel if user is admin and current tab is hunt
+  useEffect(() => {
+    if (user?.role === 'admin' && activeTab === 'hunt') {
+      setActiveTab('admin');
+    }
+  }, [user, activeTab]);
 
   // Enforce global clipboard protection (disabled everywhere, enabled only in designated areas)
   useClipboardGuard(user);
@@ -36,7 +43,7 @@ function MainLayout() {
         />
 
         <main className="pb-16">
-          {activeTab === 'hunt' && (
+          {activeTab === 'hunt' && user?.role !== 'admin' && (
             <HuntArena 
               onOpenAuth={() => setAuthModalOpen(true)}
             />
@@ -64,6 +71,14 @@ function MainLayout() {
           </div>
 
           <div className="flex items-center space-x-4">
+            {user?.role !== 'admin' && (
+              <button 
+                onClick={() => setActiveTab('hunt')} 
+                className="hover:theme-text-primary transition-colors"
+              >
+                Hunt Arena
+              </button>
+            )}
             <button 
               onClick={() => setActiveTab('standings')} 
               className="hover:theme-text-primary transition-colors"

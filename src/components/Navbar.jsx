@@ -24,7 +24,7 @@ export default function Navbar({ activeTab, setActiveTab, onOpenAuth }) {
           
             {/* Logo / Crest */}
             <div 
-              onClick={() => setActiveTab('hunt')}
+              onClick={() => setActiveTab(user?.role === 'admin' ? 'admin' : 'hunt')}
               className="flex items-center space-x-3 cursor-pointer select-none group"
             >
               <div className="bg-white/95 p-1 rounded-lg border border-cyan-500/40 shadow-[0_0_12px_rgba(0,240,255,0.25)] flex items-center justify-center flex-shrink-0">
@@ -51,17 +51,19 @@ export default function Navbar({ activeTab, setActiveTab, onOpenAuth }) {
 
             {/* Navigation Controls */}
             <nav className="flex items-center space-x-1 sm:space-x-2.5">
-              <button
-                onClick={() => setActiveTab('hunt')}
-                className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-sm font-mono font-bold transition-all ${
-                  activeTab === 'hunt'
-                    ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/40 shadow-[0_0_12px_rgba(0,240,255,0.2)]'
-                    : 'theme-text-secondary hover:text-cyan-400 hover:theme-bg-surface'
-                }`}
-              >
-                <Compass className="w-4 h-4 text-cyan-400" />
-                <span>[ HUNT_ARENA ]</span>
-              </button>
+              {user?.role !== 'admin' && (
+                <button
+                  onClick={() => setActiveTab('hunt')}
+                  className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-sm font-mono font-bold transition-all ${
+                    activeTab === 'hunt'
+                      ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/40 shadow-[0_0_12px_rgba(0,240,255,0.2)]'
+                      : 'theme-text-secondary hover:text-cyan-400 hover:theme-bg-surface'
+                  }`}
+                >
+                  <Compass className="w-4 h-4 text-cyan-400" />
+                  <span>[ HUNT_ARENA ]</span>
+                </button>
+              )}
 
               <button
                 onClick={() => setActiveTab('standings')}
