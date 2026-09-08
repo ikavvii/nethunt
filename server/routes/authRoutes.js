@@ -86,9 +86,13 @@ authRouter.post('/login', (req, res) => {
 // Admin Login
 authRouter.post('/admin-login', (req, res) => {
   const { adminKey } = req.body;
-  const configKey = db.prepare("SELECT value FROM config WHERE key = 'admin_key'").get()?.value || 'login2026admin';
+  const envKey1 = process.env.ADMIN_KEY;
+  const envKey2 = process.env.ADMIN_PASSKEY;
+  const configKey = db.prepare("SELECT value FROM config WHERE key = 'admin_key'").get()?.value;
+  
+  const validKeys = [envKey1, envKey2, configKey, 'login2026admin'].filter(Boolean);
 
-  if (!adminKey || adminKey !== configKey) {
+  if (!adminKey || !validKeys.includes(adminKey)) {
     return res.status(401).json({ error: 'Invalid Game Master Key' });
   }
 

@@ -155,7 +155,7 @@ function seedSystem() {
   const getConfig = db.prepare('SELECT value FROM config WHERE key = ?');
 
   if (!getConfig.get('event_status')) setConfig.run('event_status', 'active');
-  if (!getConfig.get('admin_key')) setConfig.run('admin_key', 'login2026admin');
+  if (!getConfig.get('admin_key')) setConfig.run('admin_key', process.env.ADMIN_KEY || process.env.ADMIN_PASSKEY || 'login2026admin');
   
   // Level up default trajectory to 20 nodes
   setConfig.run('path_length', '20');

@@ -17,6 +17,8 @@ services:
         value: 3001
       - key: JWT_SECRET
         generateValue: true
+      - key: ADMIN_KEY
+        value: login2026admin
       - key: ADMIN_PASSKEY
-        value: psg_mca_admin_2026_passkey
+        value: login2026admin
 
