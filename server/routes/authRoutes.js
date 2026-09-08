@@ -86,13 +86,16 @@ authRouter.post('/login', (req, res) => {
 // Admin Login
 authRouter.post('/admin-login', (req, res) => {
   const { adminKey } = req.body;
-  const envKey1 = process.env.ADMIN_KEY;
-  const envKey2 = process.env.ADMIN_PASSKEY;
+  const envKey = process.env.ADMIN_KEY || process.env.ADMIN_PASSKEY;
   const configKey = db.prepare("SELECT value FROM config WHERE key = 'admin_key'").get()?.value;
-  
-  const validKeys = [envKey1, envKey2, configKey, 'login2026admin'].filter(Boolean);
 
-  if (!adminKey || !validKeys.includes(adminKey)) {
+  // Strict Single Key Enforcement:
+  // 1. Environment variable ADMIN_KEY / ADMIN_PASSKEY has absolute priority.
+  // 2. If no environment variable is provided, the database config 'admin_key' is used.
+  // 3. Fallback 'login2026admin' is ONLY used if neither environment variable nor database config exists.
+  const activeKey = envKey || configKey || 'login2026admin';
+
+  if (!adminKey || adminKey !== activeKey) {
     return res.status(401).json({ error: 'Invalid Game Master Key' });
   }
 
@@ -100,9 +103,11 @@ authRouter.post('/admin-login', (req, res) => {
   if (!adminUser) {
     const resId = db.prepare(`
       INSERT INTO users (username, passkey, name, batch, email, role, created_at)
-      VALUES ('admin', 'login2026admin', 'LOGIN 2026 Game Master', 'Staff', 'admin@psgtech.ac.in', 'admin', ?)
-    `).run(Date.now());
+      VALUES ('admin', ?, 'LOGIN 2026 Game Master', 'Staff', 'admin@psgtech.ac.in', 'admin', ?)
+    `).run(activeKey, Date.now());
     adminUser = db.prepare("SELECT * FROM users WHERE id = ?").get(resId.lastInsertRowid);
+  } else if (adminUser.passkey !== activeKey) {
+    db.prepare("UPDATE users SET passkey = ? WHERE username = 'admin'").run(activeKey);
   }
 
   const token = generateToken(adminUser);

@@ -90,6 +90,43 @@ export default function AdminDashboard() {
   const [testResult, setTestResult] = useState(null);
   const [testing, setTesting] = useState(false);
 
+  // Change Admin Key state
+  const [newAdminKeyInput, setNewAdminKeyInput] = useState('');
+  const [adminKeyStatus, setAdminKeyStatus] = useState(null);
+  const [adminKeyLoading, setAdminKeyLoading] = useState(false);
+
+  const handleChangeAdminKey = async (e) => {
+    e.preventDefault();
+    if (!newAdminKeyInput || newAdminKeyInput.trim().length < 6) {
+      setAdminKeyStatus({ type: 'error', message: 'Passkey must be at least 6 characters long.' });
+      return;
+    }
+    setAdminKeyLoading(true);
+    setAdminKeyStatus(null);
+    try {
+      const res = await fetch('/api/admin/change-admin-key', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ newAdminKey: newAdminKeyInput.trim() })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setAdminKeyStatus({ type: 'success', message: data.message });
+        setNewAdminKeyInput('');
+        fetchConfig();
+      } else {
+        setAdminKeyStatus({ type: 'error', message: data.error || 'Failed to update passkey' });
+      }
+    } catch (err) {
+      setAdminKeyStatus({ type: 'error', message: 'Network error: ' + err.message });
+    } finally {
+      setAdminKeyLoading(false);
+    }
+  };
+
   const fetchAlumni = async () => {
     try {
       const q = searchQuery ? `?q=${encodeURIComponent(searchQuery)}` : '';
@@ -1644,6 +1681,75 @@ export default function AdminDashboard() {
                 </p>
               </div>
             </div>
+          </div>
+
+          {/* Game Master Passkey Management */}
+          <div className="theme-bg-card border theme-border p-6 rounded-2xl shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center space-x-2">
+                  <Key className="w-5 h-5 text-amber-500" />
+                  <h3 className="font-bold text-base theme-text-primary">
+                    Game Master Secret Passkey &amp; Access Control
+                  </h3>
+                </div>
+                <p className="text-xs theme-text-muted mt-1 font-mono">
+                  Rotate your Game Master login passkey. Setting a custom key immediately revokes login2026admin.
+                </p>
+              </div>
+              <div className="flex items-center space-x-2">
+                {config.isEnvAdminKeySet ? (
+                  <span className="px-2.5 py-1 rounded-lg text-xs font-bold font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                    LOCKED BY ENV (ADMIN_KEY)
+                  </span>
+                ) : config.hasCustomAdminKey ? (
+                  <span className="px-2.5 py-1 rounded-lg text-xs font-bold font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                    CUSTOM KEY ACTIVE &bull; login2026admin REVOKED
+                  </span>
+                ) : (
+                  <span className="px-2.5 py-1 rounded-lg text-xs font-bold font-mono bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                    DEFAULT KEY IN USE &bull; ROTATE RECOMMENDED
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {adminKeyStatus && (
+              <div className={`p-3.5 rounded-xl text-xs flex items-center space-x-2 font-mono ${
+                adminKeyStatus.type === 'success' 
+                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' 
+                  : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
+              }`}>
+                {adminKeyStatus.type === 'success' ? <CheckCircle className="w-4 h-4 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 flex-shrink-0" />}
+                <span>{adminKeyStatus.message}</span>
+              </div>
+            )}
+
+            {config.isEnvAdminKeySet ? (
+              <p className="text-xs font-mono theme-text-secondary bg-slate-900/60 p-3.5 rounded-xl border theme-border leading-relaxed">
+                &gt; Your Admin Key is currently controlled by the <code className="text-amber-400 font-bold">ADMIN_KEY</code> environment variable in your deployment platform (e.g. Render). To change it, update the variable in Render Dashboard &rarr; Environment. The default login2026admin is strictly blocked.
+              </p>
+            ) : (
+              <form onSubmit={handleChangeAdminKey} className="flex flex-col sm:flex-row gap-3 pt-1">
+                <div className="flex-1">
+                  <input
+                    type="text"
+                    value={newAdminKeyInput}
+                    onChange={(e) => setNewAdminKeyInput(e.target.value)}
+                    placeholder="Enter new custom Game Master key (min 6 chars)"
+                    required
+                    className="w-full theme-bg-surface border theme-border rounded-xl p-3 theme-text-primary text-xs focus:outline-none focus:border-amber-500 font-mono"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={adminKeyLoading}
+                  className="px-6 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs uppercase font-mono tracking-wider shadow-sm transition-all cursor-pointer whitespace-nowrap disabled:opacity-50"
+                >
+                  {adminKeyLoading ? '[ UPDATING... ]' : '[ ROTATE_ADMIN_KEY ]'}
+                </button>
+              </form>
+            )}
           </div>
 
           {/* Theme Matrix in Settings */}

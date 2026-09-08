@@ -536,12 +536,19 @@ adminRouter.post('/nodes/:id/test-solve', (req, res) => {
 adminRouter.get('/config', (req, res) => {
   const rows = db.prepare('SELECT key, value FROM config').all();
   const config = {};
-  for (const r of rows) config[r.key] = r.value;
+  for (const r of rows) {
+    if (r.key === 'admin_key') {
+      config.hasCustomAdminKey = r.value !== 'login2026admin';
+    } else {
+      config[r.key] = r.value;
+    }
+  }
+  config.isEnvAdminKeySet = Boolean(process.env.ADMIN_KEY || process.env.ADMIN_PASSKEY);
   res.json({ config });
 });
 
 adminRouter.post('/config', (req, res) => {
-  const { event_status, path_length, event_end_time } = req.body;
+  const { event_status, path_length, event_end_time, new_admin_key } = req.body;
   const setConfig = db.prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)');
 
   if (event_status) {
@@ -550,6 +557,28 @@ adminRouter.post('/config', (req, res) => {
   }
   if (path_length) setConfig.run('path_length', String(path_length));
   if (event_end_time) setConfig.run('event_end_time', String(event_end_time));
+  if (new_admin_key && typeof new_admin_key === 'string' && new_admin_key.trim().length >= 6) {
+    const cleanKey = new_admin_key.trim();
+    setConfig.run('admin_key', cleanKey);
+    db.prepare("UPDATE users SET passkey = ? WHERE username = 'admin'").run(cleanKey);
+  }
 
   res.json({ success: true, message: 'Configuration saved' });
+});
+
+// Dedicated Change Game Master Key
+adminRouter.post('/change-admin-key', (req, res) => {
+  const { newAdminKey } = req.body;
+  if (!newAdminKey || typeof newAdminKey !== 'string' || newAdminKey.trim().length < 6) {
+    return res.status(400).json({ error: 'New Game Master Key must be at least 6 characters long.' });
+  }
+
+  const cleanKey = newAdminKey.trim();
+  db.prepare("INSERT OR REPLACE INTO config (key, value) VALUES ('admin_key', ?)").run(cleanKey);
+  db.prepare("UPDATE users SET passkey = ? WHERE username = 'admin'").run(cleanKey);
+
+  res.json({
+    success: true,
+    message: 'Game Master Secret Key updated successfully. The default login2026admin key is revoked and only your new key is valid.'
+  });
 });

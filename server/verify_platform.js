@@ -424,6 +424,35 @@ async function runRigorousTests() {
     });
     assert(oldPassLogin.status === 401, 'AUTH: Old default phone password rejected after password change');
 
+    // 15: Game Master Admin Key Rotation & Revocation of login2026admin
+    console.log('\n--- Verifying Admin Key Rotation & Revocation of login2026admin ---');
+    const rotateRes = await fetch(`${BASE}/api/admin/change-admin-key`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+      body: JSON.stringify({ newAdminKey: 'psgCustomSecretKey999!' })
+    }).then(r => r.json());
+    assert(rotateRes.success === true, 'ADMIN: Game Master key rotated successfully via /api/admin/change-admin-key');
+
+    // Attempt login with old default login2026admin -> MUST BE STRICTLY REJECTED (401)
+    const oldAdminAttempt = await fetch(`${BASE}/api/auth/admin-login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ adminKey: 'login2026admin' })
+    });
+    assert(oldAdminAttempt.status === 401, 'SECURITY: Default login2026admin is strictly blocked after custom key is set');
+
+    // Attempt login with new custom key -> MUST SUCCEED (200)
+    const newAdminAttempt = await fetch(`${BASE}/api/auth/admin-login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ adminKey: 'psgCustomSecretKey999!' })
+    });
+    assert(newAdminAttempt.status === 200, 'ADMIN: Login with new custom Game Master passkey succeeds');
+
+    // Clean up: Reset back to default in db for clean state
+    db.prepare("UPDATE config SET value = 'login2026admin' WHERE key = 'admin_key'").run();
+    db.prepare("UPDATE users SET passkey = 'login2026admin' WHERE username = 'admin'").run();
+
     console.log('\n================================================================');
     console.log(`  ALL CRITICAL OBJECTIVES VERIFIED: ${passed} PASSED, ${failed} FAILED`);
     console.log('================================================================\n');
