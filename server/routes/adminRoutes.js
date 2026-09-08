@@ -430,18 +430,48 @@ adminRouter.delete('/alumni/:id', async (req, res) => {
   res.json({ success: true, message: `Alumni @${user.username} successfully removed.` });
 });
 
-// READ Proctor Logs
+// RESET Alumni Proctor Violations
+adminRouter.post('/alumni/:id/reset-violations', async (req, res) => {
+  const { id } = req.params;
+  await db.prepare('UPDATE users SET tab_violations = 0 WHERE id = ?').run(id);
+  res.json({ success: true, message: 'Alumnus proctor infractions reset to zero.' });
+});
+
+// READ Proctor Logs (with optional filtering by event type and search)
 adminRouter.get('/proctor-logs', async (req, res) => {
-  const limit = parseInt(req.query.limit) || 100;
-  const logs = await db.prepare(`
+  const limit = parseInt(req.query.limit) || 250;
+  const { type, q } = req.query;
+
+  let sql = `
     SELECT p.*, u.username, u.name, u.batch
     FROM proctor_logs p
     JOIN users u ON p.user_id = u.id
-    ORDER BY p.timestamp DESC
-    LIMIT ?
-  `).all(limit);
+    WHERE 1=1
+  `;
+  const params = [];
 
+  if (type && type !== 'ALL') {
+    sql += ` AND p.event_type = ?`;
+    params.push(type);
+  }
+
+  if (q && q.trim()) {
+    sql += ` AND (u.name LIKE ? OR u.username LIKE ? OR u.batch LIKE ?)`;
+    const searchParam = `%${q.trim()}%`;
+    params.push(searchParam, searchParam, searchParam);
+  }
+
+  sql += ` ORDER BY p.timestamp DESC LIMIT ?`;
+  params.push(limit);
+
+  const logs = await db.prepare(sql).all(...params);
   res.json({ logs });
+});
+
+// DELETE / PURGE Proctor Logs
+adminRouter.delete('/proctor-logs', async (req, res) => {
+  await db.prepare('DELETE FROM proctor_logs').run();
+  res.json({ success: true, message: 'All proctor logs have been cleared.' });
 });
 
 // READ Master Node Pool

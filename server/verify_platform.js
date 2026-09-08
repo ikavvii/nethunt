@@ -560,6 +560,85 @@ async function runRigorousTests() {
     const restoredLbRes = await fetch(`${BASE}/api/leaderboard`).then(r => r.json());
     assert(restoredLbRes.visible === true && restoredLbRes.isAdminPreview === false && restoredLbRes.leaderboard.length > 0, 'LEADERBOARD: Public participant can view full standings again after unfreeze');
 
+    // 18: Test Integrity & Proctoring Telemetry Suite
+    console.log('\n--- Verifying Test Integrity & Proctoring Telemetry Suite ---');
+
+    // 18A: Participant logs FULLSCREEN_EXIT
+    const fsExitRes = await fetch(`${BASE}/api/hunt/proctor-event`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${loginB.token}` },
+      body: JSON.stringify({
+        event_type: 'FULLSCREEN_EXIT',
+        metadata: { reason: 'User exited fullscreen window during solve' }
+      })
+    }).then(r => r.json());
+    assert(fsExitRes.recorded === true && fsExitRes.event_type === 'FULLSCREEN_EXIT', 'PROCTOR: FULLSCREEN_EXIT logged successfully');
+
+    // 18B: Participant logs TAB_SWITCH
+    const tabSwitchRes = await fetch(`${BASE}/api/hunt/proctor-event`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${loginB.token}` },
+      body: JSON.stringify({
+        event_type: 'TAB_SWITCH',
+        metadata: { reason: 'Browser tab lost visibility' }
+      })
+    }).then(r => r.json());
+    assert(tabSwitchRes.recorded === true && tabSwitchRes.event_type === 'TAB_SWITCH', 'PROCTOR: TAB_SWITCH logged successfully');
+
+    // 18C: Participant logs WINDOW_BLUR (Alt-Tab)
+    const blurRes = await fetch(`${BASE}/api/hunt/proctor-event`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${loginB.token}` },
+      body: JSON.stringify({
+        event_type: 'WINDOW_BLUR',
+        metadata: { reason: 'Alt-Tab focus lost' }
+      })
+    }).then(r => r.json());
+    assert(blurRes.recorded === true && blurRes.event_type === 'WINDOW_BLUR', 'PROCTOR: WINDOW_BLUR (Alt-Tab) logged successfully');
+
+    // 18D: Participant logs DEVTOOLS_SHORTCUT
+    const devtoolsRes = await fetch(`${BASE}/api/hunt/proctor-event`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${loginB.token}` },
+      body: JSON.stringify({
+        event_type: 'DEVTOOLS_SHORTCUT',
+        metadata: { combo: 'Ctrl+Shift+I', key: 'I' }
+      })
+    }).then(r => r.json());
+    assert(devtoolsRes.recorded === true && devtoolsRes.event_type === 'DEVTOOLS_SHORTCUT', 'PROCTOR: DEVTOOLS_SHORTCUT logged successfully');
+
+    // 18E: Participant logs CLIPBOARD_PASTE_ATTEMPT
+    const pasteRes = await fetch(`${BASE}/api/hunt/proctor-event`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${loginB.token}` },
+      body: JSON.stringify({
+        event_type: 'CLIPBOARD_PASTE_ATTEMPT',
+        metadata: { target: 'answer_input' }
+      })
+    }).then(r => r.json());
+    assert(pasteRes.recorded === true && pasteRes.totalViolations >= 5, 'PROCTOR: Cumulative infractions incremented tab_violations (>= 5)');
+
+    // 18F: Admin fetches Proctor Logs with event filtering
+    const allProctorLogs = await fetch(`${BASE}/api/admin/proctor-logs`, {
+      headers: { 'Authorization': `Bearer ${adminToken}` }
+    }).then(r => r.json());
+    assert(allProctorLogs.logs && allProctorLogs.logs.length >= 5, 'ADMIN PROCTOR: Admin retrieved audit logs containing all recorded events');
+
+    const filteredFsLogs = await fetch(`${BASE}/api/admin/proctor-logs?type=FULLSCREEN_EXIT`, {
+      headers: { 'Authorization': `Bearer ${adminToken}` }
+    }).then(r => r.json());
+    assert(filteredFsLogs.logs.every(l => l.event_type === 'FULLSCREEN_EXIT'), 'ADMIN PROCTOR: Filtered query ?type=FULLSCREEN_EXIT returned only fullscreen exit logs');
+
+    // 18G: Admin resets alumnus violations
+    const resetWarnsRes = await fetch(`${BASE}/api/admin/alumni/${loginB.user.id}/reset-violations`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${adminToken}` }
+    }).then(r => r.json());
+    assert(resetWarnsRes.success === true, 'ADMIN PROCTOR: Reset alumnus infractions to 0 via /api/admin/alumni/:id/reset-violations');
+
+    const clearedUser = await db.prepare('SELECT tab_violations FROM users WHERE id = ?').get(loginB.user.id);
+    assert(clearedUser.tab_violations === 0, 'ADMIN PROCTOR: Database confirms alumnus tab_violations is now 0');
+
     // Clean up: Reset back to default in db for clean state
     await db.prepare("UPDATE config SET value = 'login2026admin' WHERE key = 'admin_key'").run();
     await db.prepare("UPDATE users SET passkey = 'login2026admin' WHERE username = 'admin'").run();

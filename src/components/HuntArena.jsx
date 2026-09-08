@@ -15,8 +15,15 @@ import {
   Layers,
   Clock,
   Pause,
-  Square
+  Square,
+  Maximize,
+  Minimize,
+  ShieldAlert,
+  ShieldCheck,
+  AlertOctagon,
+  X
 } from 'lucide-react';
+import { useProctorGuard } from '../utils/useProctorGuard';
 
 export default function HuntArena({ onOpenAuth }) {
   const { user, token, refreshUser, eventStatus: authEventStatus, setEventStatus } = useAuth();
@@ -29,6 +36,12 @@ export default function HuntArena({ onOpenAuth }) {
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const [unlockingHint, setUnlockingHint] = useState(false);
   const [copiedPayload, setCopiedPayload] = useState(false);
+
+  // Proctoring & Fullscreen State
+  const [adminFullscreenBypass, setAdminFullscreenBypass] = useState(false);
+  const [proctorViolations, setProctorViolations] = useState(user?.tab_violations || 0);
+  const [activeProctorAlert, setActiveProctorAlert] = useState(null);
+  const alertTimerRef = useRef(null);
 
   const inputRef = useRef(null);
 
@@ -63,6 +76,60 @@ export default function HuntArena({ onOpenAuth }) {
   useEffect(() => {
     fetchCurrentNode();
   }, [token, user?.current_step]);
+
+  // Sync tabViolations from user or currentNodeData
+  useEffect(() => {
+    if (currentNodeData?.tabViolations !== undefined) {
+      setProctorViolations(currentNodeData.tabViolations);
+    } else if (user?.tab_violations !== undefined) {
+      setProctorViolations(user.tab_violations);
+    }
+  }, [currentNodeData?.tabViolations, user?.tab_violations]);
+
+  const handleViolation = (eventType, metadata, totalViolations) => {
+    if (totalViolations !== undefined) {
+      setProctorViolations(totalViolations);
+    } else {
+      setProctorViolations(prev => prev + 1);
+    }
+
+    let readableReason = 'Test integrity infraction recorded';
+    if (eventType === 'FULLSCREEN_EXIT') readableReason = 'Fullscreen window exited during active hunt';
+    else if (eventType === 'TAB_SWITCH') readableReason = 'Tab switch / backgrounding detected';
+    else if (eventType === 'WINDOW_BLUR') readableReason = 'Window focus lost / Alt-Tab detected';
+    else if (eventType === 'DEVTOOLS_SHORTCUT') readableReason = `DevTools shortcut [${metadata?.combo || metadata?.key || 'key'}] blocked`;
+    else if (eventType === 'CLIPBOARD_PASTE_ATTEMPT') readableReason = 'Direct answer paste blocked';
+
+    setActiveProctorAlert({
+      type: eventType,
+      reason: readableReason,
+      timestamp: new Date().toLocaleTimeString()
+    });
+
+    if (alertTimerRef.current) clearTimeout(alertTimerRef.current);
+    alertTimerRef.current = setTimeout(() => {
+      setActiveProctorAlert(null);
+    }, 6500);
+  };
+
+  const proctoringEnabled = Boolean(
+    token && 
+    user && 
+    (user.role !== 'admin' || !adminFullscreenBypass) && 
+    !currentNodeData?.completed
+  );
+
+  const {
+    isFullscreen,
+    enterFullscreen,
+    exitFullscreen,
+    reportProctorEvent
+  } = useProctorGuard({
+    enabled: proctoringEnabled,
+    token,
+    currentStep: currentNodeData?.stepIndex ?? user?.current_step,
+    onViolation: handleViolation
+  });
 
   // Cooldown countdown timer
   useEffect(() => {
@@ -287,6 +354,81 @@ export default function HuntArena({ onOpenAuth }) {
     );
   }
 
+  // Proctored Fullscreen Required Gate (Locks arena unless in fullscreen mode)
+  if (proctoringEnabled && !isFullscreen && !(user?.role === 'admin' && adminFullscreenBypass)) {
+    return (
+      <div className="max-w-3xl mx-auto my-12 px-4">
+        <div className="p-8 sm:p-12 rounded-3xl theme-bg-card border-2 border-amber-500/40 shadow-2xl space-y-6 text-center">
+          <div className="w-20 h-20 mx-auto rounded-3xl bg-amber-500/15 border border-amber-500/40 text-amber-500 flex items-center justify-center shadow-lg">
+            <ShieldAlert className="w-10 h-10 animate-pulse" />
+          </div>
+
+          <div className="space-y-2">
+            <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 font-mono text-xs font-bold uppercase tracking-wider">
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+              <span>SECURE TEST INTEGRITY PROTOCOL ACTIVE</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-mono font-black theme-text-primary tracking-wide uppercase">
+              FULLSCREEN MODE REQUIRED
+            </h1>
+            <p className="text-xs sm:text-sm font-mono theme-text-muted max-w-xl mx-auto leading-relaxed">
+              &gt; To ensure absolute competitive fairness and prevent split-screen browsing or external AI copilots, LOGIN 2026 test nodes are accessible strictly in proctored fullscreen mode.
+            </p>
+          </div>
+
+          {/* Infraction Warning Notice if violations exist */}
+          {proctorViolations > 0 && (
+            <div className="p-4 rounded-2xl bg-rose-500/15 border border-rose-500/40 text-rose-500 dark:text-rose-300 font-mono text-xs text-left space-y-1.5 shadow-sm max-w-lg mx-auto">
+              <div className="flex items-center space-x-2 font-bold uppercase">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                <span>⚠️ INFRACTION WARNING // TELEMETRY RECORDED</span>
+              </div>
+              <p className="text-[11px] leading-relaxed">
+                Your session has logged <strong className="font-bold underline">{proctorViolations} proctor infraction(s)</strong> (fullscreen exits, tab switches, or window blurs). All events are timestamped and reviewed by the Game Master staff.
+              </p>
+            </div>
+          )}
+
+          {/* Enter Fullscreen Button */}
+          <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-4">
+            <button
+              onClick={enterFullscreen}
+              className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-mono font-black text-sm uppercase tracking-wider shadow-[0_0_25px_rgba(245,158,11,0.35)] hover:shadow-[0_0_35px_rgba(245,158,11,0.5)] transition-all flex items-center justify-center space-x-3 cursor-pointer"
+            >
+              <Maximize className="w-5 h-5" />
+              <span>[ ENTER FULLSCREEN TO ACCESS TEST ]</span>
+            </button>
+
+            {user?.role === 'admin' && (
+              <button
+                onClick={() => setAdminFullscreenBypass(true)}
+                className="w-full sm:w-auto px-5 py-4 rounded-2xl border theme-border font-mono text-xs font-bold theme-text-muted hover:theme-text-primary hover:theme-bg-surface transition-all cursor-pointer"
+              >
+                [ ADMIN: BYPASS FULLSCREEN ]
+              </button>
+            )}
+          </div>
+
+          {/* Proctor Rules Brief */}
+          <div className="border-t theme-border pt-5 grid grid-cols-1 sm:grid-cols-3 gap-3 text-left font-mono text-[11px] theme-text-muted">
+            <div className="p-3 rounded-xl theme-bg-surface border theme-border space-y-1">
+              <span className="font-bold theme-text-primary">&gt; FULLSCREEN ONLY</span>
+              <p>Exiting fullscreen or resizing the window immediately locks the arena.</p>
+            </div>
+            <div className="p-3 rounded-xl theme-bg-surface border theme-border space-y-1">
+              <span className="font-bold theme-text-primary">&gt; TAB SWITCHING</span>
+              <p>Switching browser tabs or minimizing records a live proctor timestamp.</p>
+            </div>
+            <div className="p-3 rounded-xl theme-bg-surface border theme-border space-y-1">
+              <span className="font-bold theme-text-primary">&gt; ALT-TAB DETECTION</span>
+              <p>Clicking outside browser or switching applications flags window blur.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const node = currentNodeData?.node;
   const currentStep = currentNodeData?.currentStep || 0;
   const totalSteps = currentNodeData?.totalSteps || 10;
@@ -294,6 +436,88 @@ export default function HuntArena({ onOpenAuth }) {
   return (
     <div className="max-w-[1700px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       
+      {/* Floating Proctor Alert Notification Toast */}
+      {activeProctorAlert && (
+        <div className="fixed top-20 right-4 z-50 max-w-md w-full p-4 rounded-2xl bg-rose-950/95 border-2 border-rose-500 text-rose-200 shadow-2xl flex items-start space-x-3 animate-pulse">
+          <AlertOctagon className="w-6 h-6 text-rose-400 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 space-y-1 font-mono">
+            <div className="flex items-center justify-between">
+              <span className="font-black text-xs uppercase tracking-wider text-rose-300">
+                ⚠️ PROCTOR INFRACTION LOGGED
+              </span>
+              <span className="text-[10px] opacity-75">{activeProctorAlert.timestamp}</span>
+            </div>
+            <p className="text-xs text-white font-sans font-medium">
+              {activeProctorAlert.reason}
+            </p>
+            <p className="text-[10px] text-rose-300/80">
+              Infraction recorded to Game Master audit trail. Total Infractions: {proctorViolations}
+            </p>
+          </div>
+          <button
+            onClick={() => setActiveProctorAlert(null)}
+            className="text-rose-400 hover:text-white transition-colors cursor-pointer p-1"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Proctored Session Status Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl theme-bg-card border theme-border font-mono text-xs shadow-sm">
+        <div className="flex items-center space-x-2.5">
+          {isFullscreen ? (
+            <>
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-emerald-500 dark:text-emerald-400 font-bold tracking-wide">
+                PROCTORED FULLSCREEN ACTIVE
+              </span>
+              <span className="theme-text-muted hidden sm:inline">&bull; Anti-tamper &amp; tab-switch detection running</span>
+            </>
+          ) : (
+            <>
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+              <span className="text-amber-500 font-bold tracking-wide">
+                [ ADMIN FULLSCREEN BYPASS ACTIVE ]
+              </span>
+            </>
+          )}
+        </div>
+
+        <div className="flex items-center space-x-3">
+          {proctorViolations > 0 ? (
+            <span className="px-3 py-1 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-500 dark:text-rose-300 font-bold flex items-center space-x-1.5">
+              <AlertTriangle className="w-3.5 h-3.5" />
+              <span>{proctorViolations} INFRACTION(S) RECORDED</span>
+            </span>
+          ) : (
+            <span className="px-3 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-bold flex items-center space-x-1.5">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>CLEAN INTEGRITY LOG</span>
+            </span>
+          )}
+
+          {isFullscreen && (
+            <button
+              onClick={exitFullscreen}
+              className="px-3 py-1 rounded-xl border theme-border theme-text-muted hover:theme-text-primary hover:theme-bg-surface transition-all text-[11px] font-bold cursor-pointer"
+              title="Exiting fullscreen will lock the challenge arena until you return"
+            >
+              [ EXIT FULLSCREEN ]
+            </button>
+          )}
+
+          {!isFullscreen && user?.role === 'admin' && adminFullscreenBypass && (
+            <button
+              onClick={() => setAdminFullscreenBypass(false)}
+              className="px-3 py-1 rounded-xl border border-amber-500/40 text-amber-500 text-[11px] font-bold hover:bg-amber-500/10 transition-all cursor-pointer"
+            >
+              [ RE-ENFORCE FULLSCREEN ]
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Trajectory Step Progress Visualizer - Single-Line Formal Design */}
       <div className="theme-bg-card border theme-border p-5 rounded-2xl shadow-sm">
         <div className="flex flex-wrap items-center justify-between text-sm font-mono mb-3 gap-2">
@@ -497,6 +721,7 @@ export default function HuntArena({ onOpenAuth }) {
                     onChange={(e) => setAnswerInput(e.target.value)}
                     onPaste={(e) => {
                       e.preventDefault();
+                      reportProctorEvent('CLIPBOARD_PASTE_ATTEMPT', { target: 'answer_input' });
                       setFeedback({
                         type: 'error',
                         message: '🔒 Clipboard paste disabled. Manual character entry required in the arena.'

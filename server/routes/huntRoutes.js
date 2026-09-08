@@ -348,7 +348,7 @@ huntRouter.post('/proctor-event', requireAuth, async (req, res) => {
   const currentStep = user.current_step || 0;
   const now = Date.now();
 
-  await db.prepare(`
+  const insertResult = await db.prepare(`
     INSERT INTO proctor_logs (user_id, event_type, step_index, timestamp, metadata)
     VALUES (?, ?, ?, ?, ?)
   `).run(user.id, event_type, currentStep, now, metadata ? JSON.stringify(metadata) : null);
@@ -356,5 +356,19 @@ huntRouter.post('/proctor-event', requireAuth, async (req, res) => {
   const newViolations = (user.tab_violations || 0) + 1;
   await db.prepare('UPDATE users SET tab_violations = ? WHERE id = ?').run(newViolations, user.id);
 
-  res.json({ recorded: true, totalViolations: newViolations });
+  // Broadcast to Game Master consoles in real-time
+  broadcastEvent('PROCTOR_VIOLATION', {
+    id: insertResult.lastInsertRowid,
+    user_id: user.id,
+    name: user.name,
+    username: user.username,
+    batch: user.batch,
+    event_type,
+    step_index: currentStep,
+    timestamp: now,
+    metadata: metadata || null,
+    totalViolations: newViolations
+  });
+
+  res.json({ recorded: true, totalViolations: newViolations, event_type });
 });

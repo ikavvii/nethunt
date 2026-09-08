@@ -29,7 +29,11 @@ import {
   Server,
   Palette,
   Copy,
-  BookOpen
+  BookOpen,
+  Maximize,
+  Minimize,
+  AlertOctagon,
+  RefreshCw
 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -40,6 +44,10 @@ export default function AdminDashboard() {
   const [alumniList, setAlumniList] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [proctorLogs, setProctorLogs] = useState([]);
+  const [proctorFilterType, setProctorFilterType] = useState('ALL');
+  const [proctorSearch, setProctorSearch] = useState('');
+  const [isRefreshingProctor, setIsRefreshingProctor] = useState(false);
+  const [isClearingLogs, setIsClearingLogs] = useState(false);
   const [nodes, setNodes] = useState([]);
   const [config, setConfig] = useState({});
 
@@ -139,14 +147,52 @@ export default function AdminDashboard() {
     } catch (e) {}
   };
 
-  const fetchProctorLogs = async () => {
+  const fetchProctorLogs = async (manual = false) => {
     try {
-      const res = await fetch('/api/admin/proctor-logs', {
+      if (manual) setIsRefreshingProctor(true);
+      const params = new URLSearchParams();
+      if (proctorFilterType && proctorFilterType !== 'ALL') params.append('type', proctorFilterType);
+      if (proctorSearch && proctorSearch.trim()) params.append('q', proctorSearch.trim());
+      const qs = params.toString() ? `?${params.toString()}` : '';
+      const res = await fetch(`/api/admin/proctor-logs${qs}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
       setProctorLogs(data.logs || []);
-    } catch (e) {}
+    } catch (e) {
+    } finally {
+      if (manual) setIsRefreshingProctor(false);
+    }
+  };
+
+  const handleResetViolations = async (userId, username) => {
+    if (!window.confirm(`Reset proctor infractions to 0 for @${username}?`)) return;
+    try {
+      await fetch(`/api/admin/alumni/${userId}/reset-violations`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      fetchAlumni();
+      fetchProctorLogs();
+    } catch (e) {
+      alert(`Failed to reset infractions: ${e.message}`);
+    }
+  };
+
+  const handlePurgeProctorLogs = async () => {
+    if (!window.confirm('Are you sure you want to permanently clear all proctor audit logs?')) return;
+    try {
+      setIsClearingLogs(true);
+      await fetch('/api/admin/proctor-logs', {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      setProctorLogs([]);
+    } catch (e) {
+      alert(`Failed to clear logs: ${e.message}`);
+    } finally {
+      setIsClearingLogs(false);
+    }
   };
 
   const fetchNodes = async () => {
@@ -176,7 +222,34 @@ export default function AdminDashboard() {
       fetchNodes();
       fetchConfig();
     }
-  }, [token, user, tab, searchQuery]);
+  }, [token, user, tab, searchQuery, proctorFilterType, proctorSearch]);
+
+  // Real-time SSE listener for Proctor Violations
+  useEffect(() => {
+    if (!token || user?.role !== 'admin') return;
+
+    const es = new EventSource('/api/events/stream');
+    es.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.type === 'PROCTOR_VIOLATION' && data.payload) {
+          const v = data.payload;
+          setProctorLogs(prev => {
+            if (prev.some(l => l.id === v.id)) return prev;
+            return [v, ...prev];
+          });
+          setAlumniList(prev => prev.map(a => {
+            if (a.id === v.user_id) {
+              return { ...a, tab_violations: v.totalViolations };
+            }
+            return a;
+          }));
+        }
+      } catch (err) {}
+    };
+
+    return () => es.close();
+  }, [token, user]);
 
   // CREATE: Single Alumni
   const handleEnrollSingle = async (e) => {
@@ -682,6 +755,7 @@ export default function AdminDashboard() {
                     <th className="py-3 px-4">Credentials</th>
                     <th className="py-3 px-4 text-center">Step</th>
                     <th className="py-3 px-4 text-center">Score</th>
+                    <th className="py-3 px-4 text-center">Integrity</th>
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -733,7 +807,40 @@ export default function AdminDashboard() {
                       <td className="py-3 px-4 text-center font-mono font-black text-sm text-cyan-300">
                         {al.score}
                       </td>
+                      <td className="py-3 px-4 text-center font-mono text-xs">
+                        {(al.tab_violations || 0) > 0 ? (
+                          <button
+                            onClick={() => {
+                              setTab('proctor');
+                              setProctorSearch(al.username);
+                            }}
+                            className={`inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] font-bold cursor-pointer transition-all ${
+                              al.tab_violations >= 3
+                                ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40 hover:bg-rose-500/30 ring-1 ring-rose-500/30 animate-pulse'
+                                : 'bg-amber-500/20 text-amber-400 border border-amber-500/40 hover:bg-amber-500/30'
+                            }`}
+                            title="Click to filter proctor telemetry for this alumnus"
+                          >
+                            <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+                            <span>{al.tab_violations} {al.tab_violations === 1 ? 'WARN' : 'WARNS'}</span>
+                          </button>
+                        ) : (
+                          <span className="text-[11px] text-emerald-500 font-bold inline-flex items-center space-x-1">
+                            <Check className="w-3 h-3 text-emerald-500" />
+                            <span>CLEAN</span>
+                          </span>
+                        )}
+                      </td>
                       <td className="py-3 px-4 text-right space-x-2">
+                        {(al.tab_violations || 0) > 0 && (
+                          <button
+                            onClick={() => handleResetViolations(al.id, al.username)}
+                            className="p-1.5 rounded-lg border border-amber-500/40 text-amber-400 hover:bg-amber-500/10 hover:border-amber-500 transition-colors cursor-pointer"
+                            title="Reset proctor infractions to 0"
+                          >
+                            <ShieldAlert className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <button
                           onClick={() => setEditingAlumni(al)}
                           className="p-1.5 rounded-lg border theme-border theme-text-secondary hover:text-amber-500 hover:theme-bg-card transition-colors cursor-pointer"
@@ -1216,51 +1323,248 @@ export default function AdminDashboard() {
       })()}
 
       {/* TAB 3: Proctor Logs */}
-      {tab === 'proctor' && (
-        <div className="theme-bg-card border theme-border rounded-2xl overflow-hidden shadow-sm">
-          <div className="p-4 theme-bg-surface border-b theme-border text-xs font-mono font-bold theme-text-primary">
-            PROCTOR TELEMETRY AUDIT TRAIL
+      {tab === 'proctor' && (() => {
+        const totalLogs = proctorLogs.length;
+        const fullscreenExits = proctorLogs.filter(l => l.event_type === 'FULLSCREEN_EXIT').length;
+        const tabSwitches = proctorLogs.filter(l => l.event_type === 'TAB_SWITCH').length;
+        const windowBlurs = proctorLogs.filter(l => l.event_type === 'WINDOW_BLUR').length;
+        const devtoolsAndClips = proctorLogs.filter(l => ['DEVTOOLS_SHORTCUT', 'CLIPBOARD_PASTE_ATTEMPT', 'CLIPBOARD_COPY_ATTEMPT'].includes(l.event_type)).length;
+
+        // Count unique users with >= 3 infractions
+        const userViolationCounts = {};
+        proctorLogs.forEach(l => {
+          userViolationCounts[l.user_id] = (userViolationCounts[l.user_id] || 0) + 1;
+        });
+        const flaggedUserCount = Object.values(userViolationCounts).filter(c => c >= 3).length;
+
+        const renderEventBadge = (eventType) => {
+          switch (eventType) {
+            case 'FULLSCREEN_EXIT':
+              return (
+                <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/40">
+                  <Maximize className="w-3 h-3 flex-shrink-0" />
+                  <span>FULLSCREEN_EXIT</span>
+                </span>
+              );
+            case 'TAB_SWITCH':
+              return (
+                <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/40">
+                  <EyeOff className="w-3 h-3 flex-shrink-0" />
+                  <span>TAB_SWITCH</span>
+                </span>
+              );
+            case 'WINDOW_BLUR':
+              return (
+                <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-purple-500/15 text-purple-400 border border-purple-500/40">
+                  <Layers className="w-3 h-3 flex-shrink-0" />
+                  <span>ALT-TAB / BLUR</span>
+                </span>
+              );
+            case 'DEVTOOLS_SHORTCUT':
+              return (
+                <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/50">
+                  <Terminal className="w-3 h-3 flex-shrink-0" />
+                  <span>DEVTOOLS_ATTEMPT</span>
+                </span>
+              );
+            case 'CLIPBOARD_PASTE_ATTEMPT':
+              return (
+                <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-cyan-500/15 text-cyan-400 border border-cyan-500/40">
+                  <Copy className="w-3 h-3 flex-shrink-0" />
+                  <span>PASTE_BLOCKED</span>
+                </span>
+              );
+            case 'CLIPBOARD_COPY_ATTEMPT':
+              return (
+                <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-cyan-500/15 text-cyan-400 border border-cyan-500/40">
+                  <Copy className="w-3 h-3 flex-shrink-0" />
+                  <span>COPY_BLOCKED</span>
+                </span>
+              );
+            default:
+              return (
+                <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-800 text-slate-300 border theme-border">
+                  <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                  <span>{eventType}</span>
+                </span>
+              );
+          }
+        };
+
+        const renderMetadata = (meta) => {
+          if (!meta) return '—';
+          let obj = meta;
+          if (typeof meta === 'string') {
+            try { obj = JSON.parse(meta); } catch (e) { return meta; }
+          }
+          if (obj.reason) return obj.reason;
+          if (obj.combo) return `Shortcut Pressed: ${obj.combo}`;
+          if (obj.target) return `Field: ${obj.target}`;
+          if (obj.detail) return obj.detail;
+          return JSON.stringify(obj);
+        };
+
+        return (
+          <div className="space-y-6">
+            
+            {/* Proctor Metrics Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 font-mono">
+              <div className="p-4 rounded-2xl theme-bg-card border theme-border shadow-sm space-y-1">
+                <span className="text-[10px] theme-text-muted uppercase tracking-wider block">Total Infractions</span>
+                <span className="text-2xl font-black theme-text-primary">{totalLogs}</span>
+              </div>
+              <div className="p-4 rounded-2xl theme-bg-card border border-rose-500/30 shadow-sm space-y-1">
+                <span className="text-[10px] text-rose-400 uppercase tracking-wider block">Fullscreen Exits</span>
+                <span className="text-2xl font-black text-rose-400">{fullscreenExits}</span>
+              </div>
+              <div className="p-4 rounded-2xl theme-bg-card border border-amber-500/30 shadow-sm space-y-1">
+                <span className="text-[10px] text-amber-400 uppercase tracking-wider block">Tab Switches</span>
+                <span className="text-2xl font-black text-amber-400">{tabSwitches}</span>
+              </div>
+              <div className="p-4 rounded-2xl theme-bg-card border border-purple-500/30 shadow-sm space-y-1">
+                <span className="text-[10px] text-purple-400 uppercase tracking-wider block">Alt-Tab / Blur</span>
+                <span className="text-2xl font-black text-purple-400">{windowBlurs}</span>
+              </div>
+              <div className="p-4 rounded-2xl theme-bg-card border border-cyan-500/30 shadow-sm space-y-1">
+                <span className="text-[10px] text-cyan-400 uppercase tracking-wider block">DevTools &amp; Pastes</span>
+                <span className="text-2xl font-black text-cyan-400">{devtoolsAndClips}</span>
+              </div>
+              <div className="p-4 rounded-2xl theme-bg-card border border-rose-500/40 shadow-sm space-y-1 bg-rose-500/5">
+                <span className="text-[10px] text-rose-400 uppercase tracking-wider block">Flagged Users (&ge;3)</span>
+                <span className="text-2xl font-black text-rose-400">{flaggedUserCount}</span>
+              </div>
+            </div>
+
+            {/* Toolbar: Search, Filters & Actions */}
+            <div className="theme-bg-card border theme-border p-4 rounded-2xl flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 shadow-sm font-mono text-xs">
+              <div className="flex-1 relative">
+                <Search className="w-4 h-4 theme-text-muted absolute left-3.5 top-3" />
+                <input
+                  type="text"
+                  value={proctorSearch}
+                  onChange={(e) => setProctorSearch(e.target.value)}
+                  placeholder="Filter logs by alumni name, handle, or batch..."
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl theme-bg-surface border theme-border theme-text-primary text-xs focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2.5">
+                <div className="flex items-center space-x-2">
+                  <Filter className="w-4 h-4 theme-text-muted" />
+                  <select
+                    value={proctorFilterType}
+                    onChange={(e) => setProctorFilterType(e.target.value)}
+                    className="px-3 py-2.5 rounded-xl theme-bg-surface border theme-border theme-text-primary text-xs font-mono font-bold focus:outline-none focus:border-amber-500 cursor-pointer"
+                  >
+                    <option value="ALL">ALL EVENT TYPES ({totalLogs})</option>
+                    <option value="FULLSCREEN_EXIT">FULLSCREEN_EXIT</option>
+                    <option value="TAB_SWITCH">TAB_SWITCH</option>
+                    <option value="WINDOW_BLUR">WINDOW_BLUR (ALT-TAB)</option>
+                    <option value="DEVTOOLS_SHORTCUT">DEVTOOLS_SHORTCUT</option>
+                    <option value="CLIPBOARD_PASTE_ATTEMPT">CLIPBOARD_PASTE_ATTEMPT</option>
+                    <option value="CLIPBOARD_COPY_ATTEMPT">CLIPBOARD_COPY_ATTEMPT</option>
+                  </select>
+                </div>
+
+                <button
+                  onClick={() => fetchProctorLogs(true)}
+                  className="px-3.5 py-2.5 rounded-xl border theme-border theme-text-primary hover:theme-bg-surface transition-all flex items-center space-x-1.5 cursor-pointer font-bold"
+                  title="Force refresh proctor telemetry"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingProctor ? 'animate-spin text-amber-500' : ''}`} />
+                  <span>[ REFRESH ]</span>
+                </button>
+
+                <button
+                  onClick={handlePurgeProctorLogs}
+                  disabled={isClearingLogs || proctorLogs.length === 0}
+                  className="px-3.5 py-2.5 rounded-xl border border-rose-500/40 text-rose-400 hover:bg-rose-500/10 transition-all flex items-center space-x-1.5 cursor-pointer font-bold disabled:opacity-50"
+                  title="Permanently clear all proctor audit logs"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>[ CLEAR AUDIT TRAIL ]</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Proctor Logs Table */}
+            <div className="theme-bg-card border theme-border rounded-2xl overflow-hidden shadow-sm">
+              <div className="p-4 theme-bg-surface border-b theme-border flex items-center justify-between text-xs font-mono">
+                <div className="flex items-center space-x-2.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+                  <span className="font-bold theme-text-primary uppercase tracking-wider">
+                    LIVE PROCTOR TELEMETRY AUDIT TRAIL
+                  </span>
+                  <span className="theme-text-muted hidden sm:inline">&bull; Real-time SSE streaming active</span>
+                </div>
+                <span className="theme-text-muted">
+                  Showing {proctorLogs.length} events
+                </span>
+              </div>
+
+              <div className="overflow-x-auto max-h-[600px]">
+                {proctorLogs.length === 0 ? (
+                  <div className="p-12 text-center text-xs font-mono theme-text-muted space-y-2">
+                    <ShieldCheck className="w-8 h-8 text-emerald-500 mx-auto" />
+                    <p>No proctor infractions recorded. Clean telemetry across all participants.</p>
+                  </div>
+                ) : (
+                  <table className="w-full text-left text-xs font-mono">
+                    <thead className="theme-bg-surface theme-text-muted border-b theme-border sticky top-0 uppercase tracking-wider text-[11px] font-bold">
+                      <tr>
+                        <th className="py-3 px-4">Timestamp</th>
+                        <th className="py-3 px-4">Alumni Operator</th>
+                        <th className="py-3 px-4">Batch</th>
+                        <th className="py-3 px-4 text-center">Step</th>
+                        <th className="py-3 px-4">Infraction Type</th>
+                        <th className="py-3 px-4">Telemetry Description</th>
+                        <th className="py-3 px-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y theme-border">
+                      {proctorLogs.map((log) => (
+                        <tr key={log.id} className="hover:theme-bg-surface transition-colors">
+                          <td className="py-3 px-4 theme-text-muted whitespace-nowrap">
+                            {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                          </td>
+                          <td className="py-3 px-4 font-bold theme-text-primary">
+                            <div>
+                              <p className="leading-tight">{log.name}</p>
+                              <span className="text-[11px] text-cyan-500 font-normal">@{log.username}</span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 theme-text-secondary font-mono font-bold">
+                            {log.batch}
+                          </td>
+                          <td className="py-3 px-4 text-center font-bold text-amber-500">
+                            #{log.step_index + 1}
+                          </td>
+                          <td className="py-3 px-4 whitespace-nowrap">
+                            {renderEventBadge(log.event_type)}
+                          </td>
+                          <td className="py-3 px-4 font-mono text-[11px] theme-text-secondary max-w-xs truncate">
+                            {renderMetadata(log.metadata)}
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <button
+                              onClick={() => handleResetViolations(log.user_id, log.username)}
+                              className="px-2.5 py-1 rounded-lg border border-amber-500/40 text-amber-400 hover:bg-amber-500/10 text-[10px] font-bold transition-all cursor-pointer whitespace-nowrap"
+                              title="Pardon and reset proctor infractions for this alumnus"
+                            >
+                              [ RESET WARNS ]
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+
           </div>
-          <div className="overflow-x-auto max-h-[550px]">
-            <table className="w-full text-left text-xs font-mono">
-              <thead className="theme-bg-surface theme-text-muted border-b theme-border sticky top-0">
-                <tr>
-                  <th className="py-2.5 px-4">Timestamp</th>
-                  <th className="py-2.5 px-4">Alumni</th>
-                  <th className="py-2.5 px-4">Batch</th>
-                  <th className="py-2.5 px-4">Step</th>
-                  <th className="py-2.5 px-4">Event Type</th>
-                  <th className="py-2.5 px-4">Telemetry Details</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y theme-border">
-                {proctorLogs.map((log) => (
-                  <tr key={log.id} className="hover:theme-bg-surface">
-                    <td className="py-2.5 px-4 theme-text-muted whitespace-nowrap">
-                      {new Date(log.timestamp).toLocaleTimeString()}
-                    </td>
-                    <td className="py-2.5 px-4 font-bold theme-text-primary">
-                      {log.name} (@{log.username})
-                    </td>
-                    <td className="py-2.5 px-4 theme-text-secondary font-mono">
-                      {log.batch}
-                    </td>
-                    <td className="py-2.5 px-4 text-amber-500">
-                      Step #{log.step_index + 1}
-                    </td>
-                    <td className="py-2.5 px-4 font-bold text-rose-400">
-                      {log.event_type}
-                    </td>
-                    <td className="py-2.5 px-4 font-mono text-[11px] theme-text-muted">
-                      {log.metadata ? (typeof log.metadata === 'string' ? log.metadata : JSON.stringify(log.metadata)) : '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* TAB 4: Master Node Pool CRUD Management */}
       {tab === 'nodes' && (
