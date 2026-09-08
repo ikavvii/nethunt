@@ -9,7 +9,7 @@ export const adminRouter = express.Router();
 adminRouter.use(requireAdmin);
 
 // Helper: Generate unique clean username
-function generateUniqueUsername(name, email, batch, phone) {
+async function generateUniqueUsername(name, email, batch, phone) {
   let base = '';
   if (email && email.includes('@')) {
     base = email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '');
@@ -26,7 +26,7 @@ function generateUniqueUsername(name, email, batch, phone) {
 
   let candidate = base;
   let counter = 1;
-  while (db.prepare('SELECT id FROM users WHERE username = ?').get(candidate)) {
+  while (await db.prepare('SELECT id FROM users WHERE username = ?').get(candidate)) {
     candidate = `${base}_${counter}`;
     counter++;
   }
@@ -49,51 +49,54 @@ function parseRawAlumniText(text) {
   let nameIdx = -1, emailIdx = -1, phoneIdx = -1, batchIdx = -1, orgIdx = -1;
 
   if (hasHeader) {
-    nameIdx = headerTokens.findIndex(h => h.includes('NAME'));
-    emailIdx = headerTokens.findIndex(h => h.includes('EMAIL') || h.includes('MAIL'));
-    phoneIdx = headerTokens.findIndex(h => h.includes('PHONE') || h.includes('MOBILE') || h.includes('CONTACT'));
-    batchIdx = headerTokens.findIndex(h => h.includes('BATCH') || h.includes('YEAR'));
-    orgIdx = headerTokens.findIndex(h => h.includes('ORGANIZATION') || h.includes('COMPANY') || h.includes('ORG'));
+    headerTokens.forEach((h, i) => {
+      if (h.includes('NAME')) nameIdx = i;
+      else if (h.includes('MAIL')) emailIdx = i;
+      else if (h.includes('PHON') || h.includes('MOBI') || h.includes('CELL') || h.includes('CONTACT')) phoneIdx = i;
+      else if (h.includes('BATCH') || h.includes('CLASS') || h.includes('YEAR')) batchIdx = i;
+      else if (h.includes('ORG') || h.includes('COMP') || h.includes('WORK') || h.includes('EMPLOYER')) orgIdx = i;
+    });
+  } else {
+    // Default standard order: NAME, EMAIL, PHONE, BATCH, ORGANIZATION
+    nameIdx = 0; emailIdx = 1; phoneIdx = 2; batchIdx = 3; orgIdx = 4;
   }
 
-  const startIdx = hasHeader ? 1 : 0;
-  const records = [];
+  const dataLines = hasHeader ? lines.slice(1) : lines;
+  const result = [];
 
-  for (let i = startIdx; i < lines.length; i++) {
-    const parts = lines[i].split(delimiter).map(p => p.trim());
-    if (parts.length === 0 || !parts.some(Boolean)) continue;
+  for (const line of dataLines) {
+    if (!line.trim()) continue;
+    const tokens = line.split(delimiter).map(t => t.trim());
+    if (tokens.length === 0) continue;
 
-    let name = '', email = '', phone = '', batch = '', organization = '';
+    const name = nameIdx !== -1 && tokens[nameIdx] ? tokens[nameIdx] : (tokens[0] || '');
+    if (!name) continue;
 
-    if (hasHeader) {
-      if (nameIdx >= 0 && parts[nameIdx]) name = parts[nameIdx];
-      if (emailIdx >= 0 && parts[emailIdx]) email = parts[emailIdx];
-      if (phoneIdx >= 0 && parts[phoneIdx]) phone = parts[phoneIdx];
-      if (batchIdx >= 0 && parts[batchIdx]) batch = parts[batchIdx];
-      if (orgIdx >= 0 && parts[orgIdx]) organization = parts[orgIdx];
-    } else {
-      name = parts[0] || '';
-      email = parts[1] || '';
-      phone = parts[2] || '';
-      batch = parts[3] || '19MX';
-      organization = parts[4] || '';
-    }
+    const email = emailIdx !== -1 && tokens[emailIdx] ? tokens[emailIdx] : '';
+    const phone = phoneIdx !== -1 && tokens[phoneIdx] ? tokens[phoneIdx] : '';
+    const batch = batchIdx !== -1 && tokens[batchIdx] ? tokens[batchIdx] : '19MX';
+    const organization = orgIdx !== -1 && tokens[orgIdx] ? tokens[orgIdx] : '';
 
-    if (name || email || phone) {
-      records.push({ name, email, phone, batch, organization });
-    }
+    result.push({
+      name,
+      email,
+      phone,
+      batch: batch || '19MX',
+      organization
+    });
   }
 
-  return records;
+  return result;
 }
 
-// CREATE Alumni
-adminRouter.post('/alumni', (req, res) => {
-  const { name, batch, email, phone, organization } = req.body;
-  let { username, passkey } = req.body;
+// CREATE Single Alumni
+adminRouter.post('/alumni', async (req, res) => {
+  const { name, batch, email, phone, organization, username: customUsername, passkey: customPasskey } = req.body;
+  let username = customUsername;
+  let passkey = customPasskey;
 
-  if (!name || (!batch && !req.body.batch)) {
-    return res.status(400).json({ error: 'Name and Batch are required.' });
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'Alumni Name is required' });
   }
 
   const alumniName = name.trim();
@@ -107,7 +110,7 @@ adminRouter.post('/alumni', (req, res) => {
   const cleanLowerEmail = alumniEmail ? alumniEmail.toLowerCase() : null;
 
   if (cleanPhoneDigits || cleanLowerEmail) {
-    const duplicate = db.prepare(`
+    const duplicate = await db.prepare(`
       SELECT id, username, name, email, phone FROM users 
       WHERE role != 'admin' AND (
         (? IS NOT NULL AND (phone = ? OR REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '+91', '') = ?))
@@ -124,12 +127,12 @@ adminRouter.post('/alumni', (req, res) => {
 
   // Auto-generate username if not provided
   if (!username || !username.trim()) {
-    username = generateUniqueUsername(alumniName, alumniEmail, alumniBatch, alumniPhone);
+    username = await generateUniqueUsername(alumniName, alumniEmail, alumniBatch, alumniPhone);
   } else {
     username = username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
   }
 
-  const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+  const existing = await db.prepare('SELECT id FROM users WHERE username = ?').get(username);
   if (existing) {
     return res.status(409).json({ error: `Username @${username} is already registered.` });
   }
@@ -148,7 +151,7 @@ adminRouter.post('/alumni', (req, res) => {
   `);
 
   try {
-    const result = insert.run(
+    const result = await insert.run(
       username,
       passkey,
       alumniName,
@@ -160,8 +163,8 @@ adminRouter.post('/alumni', (req, res) => {
     );
 
     const newUserId = result.lastInsertRowid;
-    const path = assignPathToUser(newUserId);
-    leaderboardCache.refreshNow();
+    const path = await assignPathToUser(newUserId);
+    await leaderboardCache.refreshNow();
 
     res.json({
       success: true,
@@ -184,7 +187,7 @@ adminRouter.post('/alumni', (req, res) => {
 });
 
 // BULK CREATE Alumni (Supports TSV/Google Sheets, CSV, or JSON Array with strict duplicate prevention)
-adminRouter.post('/bulk-enroll', (req, res) => {
+adminRouter.post('/bulk-enroll', async (req, res) => {
   let list = [];
 
   if (typeof req.body.rawText === 'string' && req.body.rawText.trim()) {
@@ -232,11 +235,11 @@ adminRouter.post('/bulk-enroll', (req, res) => {
 
     let cleanUsername = (item.username || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
     if (!cleanUsername) {
-      cleanUsername = generateUniqueUsername(alumniName, alumniEmail, alumniBatch, alumniPhone);
+      cleanUsername = await generateUniqueUsername(alumniName, alumniEmail, alumniBatch, alumniPhone);
     }
 
     // Database duplicate check across username, phone, or email
-    const duplicate = db.prepare(`
+    const duplicate = await db.prepare(`
       SELECT id, username FROM users WHERE role != 'admin' AND (
         username = ?
         OR (? IS NOT NULL AND (phone = ? OR REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '+91', '') = ?))
@@ -256,7 +259,7 @@ adminRouter.post('/bulk-enroll', (req, res) => {
     const passkey = (item.passkey || alumniPhone || 'psg2026').trim();
 
     try {
-      const resId = db.prepare(`
+      const resId = await db.prepare(`
         INSERT INTO users (username, passkey, name, batch, email, phone, organization, role, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, 'alumni', ?)
       `).run(
@@ -270,7 +273,7 @@ adminRouter.post('/bulk-enroll', (req, res) => {
         Date.now()
       );
 
-      assignPathToUser(resId.lastInsertRowid);
+      await assignPathToUser(resId.lastInsertRowid);
       enrolled++;
       enrolledUsers.push({
         name: alumniName,
@@ -286,7 +289,7 @@ adminRouter.post('/bulk-enroll', (req, res) => {
     }
   }
 
-  leaderboardCache.refreshNow();
+  await leaderboardCache.refreshNow();
   res.json({
     success: true,
     enrolled,
@@ -299,7 +302,7 @@ adminRouter.post('/bulk-enroll', (req, res) => {
 });
 
 // READ All Alumni (with optional search across name, handle, batch, phone, organization, email)
-adminRouter.get('/alumni', (req, res) => {
+adminRouter.get('/alumni', async (req, res) => {
   const query = (req.query.q || '').trim().toLowerCase();
   let sql = `
     SELECT id, username, passkey, name, batch, email, phone, organization, role, current_step, score, 
@@ -320,13 +323,13 @@ adminRouter.get('/alumni', (req, res) => {
   }
 
   sql += ' ORDER BY score DESC, current_step DESC, created_at DESC';
-  const alumni = db.prepare(sql).all();
+  const alumni = await db.prepare(sql).all();
   res.json({ alumni });
 });
 
 // EXPORT All Alumni
-adminRouter.get('/alumni-export', (req, res) => {
-  const alumni = db.prepare(`
+adminRouter.get('/alumni-export', async (req, res) => {
+  const alumni = await db.prepare(`
     SELECT name, email, phone, batch, organization, username, passkey, score, current_step
     FROM users
     WHERE role != 'admin'
@@ -337,11 +340,11 @@ adminRouter.get('/alumni-export', (req, res) => {
 });
 
 // READ Single Alumni
-adminRouter.get('/alumni/:id', (req, res) => {
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+adminRouter.get('/alumni/:id', async (req, res) => {
+  const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
   if (!user) return res.status(404).json({ error: 'Alumni not found' });
 
-  const progress = db.prepare(`
+  const progress = await db.prepare(`
     SELECT p.*, n.title, n.node_code, n.tier
     FROM user_node_progress p
     JOIN nodes n ON p.node_id = n.id
@@ -353,12 +356,12 @@ adminRouter.get('/alumni/:id', (req, res) => {
 });
 
 // UPDATE Alumni
-adminRouter.put('/alumni/:id', (req, res) => {
+adminRouter.put('/alumni/:id', async (req, res) => {
   const { name, batch, passkey, email, phone, organization, score, current_step } = req.body;
-  const user = db.prepare('SELECT id FROM users WHERE id = ?').get(req.params.id);
+  const user = await db.prepare('SELECT id FROM users WHERE id = ?').get(req.params.id);
   if (!user) return res.status(404).json({ error: 'Alumni record not found' });
 
-  db.prepare(`
+  await db.prepare(`
     UPDATE users
     SET name = COALESCE(?, name),
         batch = COALESCE(?, batch),
@@ -381,33 +384,33 @@ adminRouter.put('/alumni/:id', (req, res) => {
     req.params.id
   );
 
-  leaderboardCache.refreshNow();
-  const updated = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+  await leaderboardCache.refreshNow();
+  const updated = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
   res.json({ success: true, message: 'Alumni profile updated successfully', user: updated });
 });
 
 // RESET Alumni Progress
-adminRouter.post('/alumni/:id/reset', (req, res) => {
-  const user = db.prepare('SELECT id FROM users WHERE id = ?').get(req.params.id);
+adminRouter.post('/alumni/:id/reset', async (req, res) => {
+  const user = await db.prepare('SELECT id FROM users WHERE id = ?').get(req.params.id);
   if (!user) return res.status(404).json({ error: 'Alumni record not found' });
 
-  db.prepare('UPDATE users SET current_step = 0, score = 0, tab_violations = 0, last_solved_subms = 0 WHERE id = ?').run(req.params.id);
-  db.prepare('DELETE FROM user_node_progress WHERE user_id = ?').run(req.params.id);
-  db.prepare('DELETE FROM submissions WHERE user_id = ?').run(req.params.id);
+  await db.prepare('UPDATE users SET current_step = 0, score = 0, tab_violations = 0, last_solved_subms = 0 WHERE id = ?').run(req.params.id);
+  await db.prepare('DELETE FROM user_node_progress WHERE user_id = ?').run(req.params.id);
+  await db.prepare('DELETE FROM submissions WHERE user_id = ?').run(req.params.id);
 
-  assignPathToUser(user.id);
-  leaderboardCache.refreshNow();
+  await assignPathToUser(user.id);
+  await leaderboardCache.refreshNow();
 
   res.json({ success: true, message: 'Alumni progress reset to Step 0 with new randomized trajectory.' });
 });
 
 // RESET Alumni Passkey to Registered Phone
-adminRouter.post('/alumni/:id/reset-passkey', (req, res) => {
-  const user = db.prepare('SELECT id, username, phone, name FROM users WHERE id = ?').get(req.params.id);
+adminRouter.post('/alumni/:id/reset-passkey', async (req, res) => {
+  const user = await db.prepare('SELECT id, username, phone, name FROM users WHERE id = ?').get(req.params.id);
   if (!user) return res.status(404).json({ error: 'Alumni record not found' });
 
   const resetPass = (user.phone || 'psg2026').trim();
-  db.prepare('UPDATE users SET passkey = ?, password_changed = 0 WHERE id = ?').run(resetPass, user.id);
+  await db.prepare('UPDATE users SET passkey = ?, password_changed = 0 WHERE id = ?').run(resetPass, user.id);
 
   res.json({ 
     success: true, 
@@ -417,20 +420,20 @@ adminRouter.post('/alumni/:id/reset-passkey', (req, res) => {
 });
 
 // DELETE Alumni
-adminRouter.delete('/alumni/:id', (req, res) => {
-  const user = db.prepare('SELECT id, username FROM users WHERE id = ?').get(req.params.id);
+adminRouter.delete('/alumni/:id', async (req, res) => {
+  const user = await db.prepare('SELECT id, username FROM users WHERE id = ?').get(req.params.id);
   if (!user) return res.status(404).json({ error: 'Alumni record not found' });
 
-  db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
-  leaderboardCache.refreshNow();
+  await db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
+  await leaderboardCache.refreshNow();
 
   res.json({ success: true, message: `Alumni @${user.username} successfully removed.` });
 });
 
 // READ Proctor Logs
-adminRouter.get('/proctor-logs', (req, res) => {
+adminRouter.get('/proctor-logs', async (req, res) => {
   const limit = parseInt(req.query.limit) || 100;
-  const logs = db.prepare(`
+  const logs = await db.prepare(`
     SELECT p.*, u.username, u.name, u.batch
     FROM proctor_logs p
     JOIN users u ON p.user_id = u.id
@@ -442,8 +445,8 @@ adminRouter.get('/proctor-logs', (req, res) => {
 });
 
 // READ Master Node Pool
-adminRouter.get('/nodes', (req, res) => {
-  const nodes = db.prepare('SELECT * FROM nodes ORDER BY tier ASC, id ASC').all();
+adminRouter.get('/nodes', async (req, res) => {
+  const nodes = await db.prepare('SELECT * FROM nodes ORDER BY tier ASC, id ASC').all();
   const enriched = nodes.map(n => {
     let hints = [];
     let aliases = [];
@@ -458,7 +461,7 @@ adminRouter.get('/nodes', (req, res) => {
 });
 
 // CREATE Node
-adminRouter.post('/nodes', (req, res) => {
+adminRouter.post('/nodes', async (req, res) => {
   const { node_code, code, title, clue_text, answer } = req.body;
   const targetCode = (node_code || code || '').trim().toUpperCase();
 
@@ -466,13 +469,13 @@ adminRouter.post('/nodes', (req, res) => {
     return res.status(400).json({ error: 'Node Code, Title, Clue Text, and Answer are required.' });
   }
 
-  const existing = db.prepare('SELECT id FROM nodes WHERE node_code = ?').get(targetCode);
+  const existing = await db.prepare('SELECT id FROM nodes WHERE node_code = ?').get(targetCode);
   if (existing) {
     return res.status(409).json({ error: `Node code ${targetCode} already exists.` });
   }
 
   try {
-    const id = createNode({ ...req.body, code: targetCode });
+    const id = await createNode({ ...req.body, code: targetCode });
     res.json({ success: true, message: `Node ${targetCode} created successfully.`, id });
   } catch (err) {
     res.status(500).json({ error: 'Failed to create node: ' + err.message });
@@ -480,13 +483,13 @@ adminRouter.post('/nodes', (req, res) => {
 });
 
 // UPDATE Node
-adminRouter.put('/nodes/:id', (req, res) => {
+adminRouter.put('/nodes/:id', async (req, res) => {
   const id = req.params.id;
-  const existing = db.prepare('SELECT id, node_code FROM nodes WHERE id = ?').get(id);
+  const existing = await db.prepare('SELECT id, node_code FROM nodes WHERE id = ?').get(id);
   if (!existing) return res.status(404).json({ error: 'Node not found' });
 
   try {
-    updateNode(id, req.body);
+    await updateNode(id, req.body);
     res.json({ success: true, message: `Node ${existing.node_code} updated successfully.` });
   } catch (err) {
     res.status(500).json({ error: 'Failed to update node: ' + err.message });
@@ -494,13 +497,13 @@ adminRouter.put('/nodes/:id', (req, res) => {
 });
 
 // DELETE Node
-adminRouter.delete('/nodes/:id', (req, res) => {
+adminRouter.delete('/nodes/:id', async (req, res) => {
   const id = req.params.id;
-  const existing = db.prepare('SELECT id, node_code FROM nodes WHERE id = ?').get(id);
+  const existing = await db.prepare('SELECT id, node_code FROM nodes WHERE id = ?').get(id);
   if (!existing) return res.status(404).json({ error: 'Node not found' });
 
   try {
-    deleteNode(id);
+    await deleteNode(id);
     res.json({ success: true, message: `Node ${existing.node_code} deleted successfully.` });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete node: ' + err.message });
@@ -508,10 +511,10 @@ adminRouter.delete('/nodes/:id', (req, res) => {
 });
 
 // TEST SOLVE Node Verification
-adminRouter.post('/nodes/:id/test-solve', (req, res) => {
+adminRouter.post('/nodes/:id/test-solve', async (req, res) => {
   const id = req.params.id;
   const { answer } = req.body;
-  const node = db.prepare('SELECT * FROM nodes WHERE id = ?').get(id);
+  const node = await db.prepare('SELECT * FROM nodes WHERE id = ?').get(id);
   if (!node) return res.status(404).json({ error: 'Node not found' });
 
   const clean = (answer || '').toLowerCase().trim();
@@ -533,8 +536,8 @@ adminRouter.post('/nodes/:id/test-solve', (req, res) => {
 });
 
 // CONFIG
-adminRouter.get('/config', (req, res) => {
-  const rows = db.prepare('SELECT key, value FROM config').all();
+adminRouter.get('/config', async (req, res) => {
+  const rows = await db.prepare('SELECT key, value FROM config').all();
   const config = {};
   for (const r of rows) {
     if (r.key === 'admin_key') {
@@ -547,35 +550,35 @@ adminRouter.get('/config', (req, res) => {
   res.json({ config });
 });
 
-adminRouter.post('/config', (req, res) => {
+adminRouter.post('/config', async (req, res) => {
   const { event_status, path_length, event_end_time, new_admin_key } = req.body;
   const setConfig = db.prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)');
 
   if (event_status) {
-    setConfig.run('event_status', event_status);
+    await setConfig.run('event_status', event_status);
     broadcastEvent('EVENT_STATUS_CHANGED', { status: event_status });
   }
-  if (path_length) setConfig.run('path_length', String(path_length));
-  if (event_end_time) setConfig.run('event_end_time', String(event_end_time));
+  if (path_length) await setConfig.run('path_length', String(path_length));
+  if (event_end_time) await setConfig.run('event_end_time', String(event_end_time));
   if (new_admin_key && typeof new_admin_key === 'string' && new_admin_key.trim().length >= 6) {
     const cleanKey = new_admin_key.trim();
-    setConfig.run('admin_key', cleanKey);
-    db.prepare("UPDATE users SET passkey = ? WHERE username = 'admin'").run(cleanKey);
+    await setConfig.run('admin_key', cleanKey);
+    await db.prepare("UPDATE users SET passkey = ? WHERE username = 'admin'").run(cleanKey);
   }
 
   res.json({ success: true, message: 'Configuration saved' });
 });
 
 // Dedicated Change Game Master Key
-adminRouter.post('/change-admin-key', (req, res) => {
+adminRouter.post('/change-admin-key', async (req, res) => {
   const { newAdminKey } = req.body;
   if (!newAdminKey || typeof newAdminKey !== 'string' || newAdminKey.trim().length < 6) {
     return res.status(400).json({ error: 'New Game Master Key must be at least 6 characters long.' });
   }
 
   const cleanKey = newAdminKey.trim();
-  db.prepare("INSERT OR REPLACE INTO config (key, value) VALUES ('admin_key', ?)").run(cleanKey);
-  db.prepare("UPDATE users SET passkey = ? WHERE username = 'admin'").run(cleanKey);
+  await db.prepare("INSERT OR REPLACE INTO config (key, value) VALUES ('admin_key', ?)").run(cleanKey);
+  await db.prepare("UPDATE users SET passkey = ? WHERE username = 'admin'").run(cleanKey);
 
   res.json({
     success: true,

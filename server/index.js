@@ -10,11 +10,14 @@ import { leaderboardRouter } from './routes/leaderboardRoutes.js';
 import { shoutboxRouter } from './routes/shoutboxRoutes.js';
 import { adminRouter } from './routes/adminRoutes.js';
 
+import { leaderboardCache } from './leaderboardCache.js';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Initialize DB schema & seed levels
-initDatabase();
+await initDatabase();
+await leaderboardCache.refreshNow();
 
 const app = express();
 const PORT = process.env.PORT || 3001;

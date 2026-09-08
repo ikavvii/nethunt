@@ -17,7 +17,7 @@ export function generateToken(user) {
   );
 }
 
-export function requireAuth(req, res, next) {
+export async function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Authentication token required' });
@@ -27,7 +27,7 @@ export function requireAuth(req, res, next) {
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     // Fetch latest user state from DB
-    const user = db.prepare(`
+    const user = await db.prepare(`
       SELECT id, username, name, batch, email, phone, organization, role, 
              assigned_path_json, current_step, score, tab_violations, is_disqualified, 
              passkey, password_changed, created_at

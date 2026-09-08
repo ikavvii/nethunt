@@ -37,7 +37,7 @@ async function runRigorousTests() {
 
     // 3. Full Alumni CRUD Testing
     console.log('\n--- Testing Full Alumni CRUD Operations ---');
-    db.prepare("DELETE FROM users WHERE username LIKE 'rajesh_crud%' OR username LIKE 'karthik_%' OR username LIKE 'pooja_%'").run();
+    await db.prepare("DELETE FROM users WHERE username LIKE 'rajesh_crud%' OR username LIKE 'karthik_%' OR username LIKE 'pooja_%'").run();
     
     // 3A: CREATE Alumni
     const testAlumData = {
@@ -225,7 +225,7 @@ async function runRigorousTests() {
 
     // 9. Correct Solve & Sub-Millisecond Tie-Breaking
     console.log('\n--- Testing Solve & Sub-Millisecond Tie-Breaking ---');
-    const nodeBDetail = db.prepare('SELECT answer FROM nodes WHERE node_code = ?').get(nodeB.node.code);
+    const nodeBDetail = await db.prepare('SELECT answer FROM nodes WHERE node_code = ?').get(nodeB.node.code);
     const solveB = await fetch(`${BASE}/api/hunt/submit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${loginB.token}` },
@@ -242,34 +242,35 @@ async function runRigorousTests() {
 
     // 10. Verify Expanded 60-Puzzle Master Library
     console.log('\n--- Verifying Expanded 60-Puzzle Master Library ---');
-    const totalNodesCount = db.prepare("SELECT COUNT(*) as count FROM nodes").get().count;
+    const countRow = await db.prepare("SELECT COUNT(*) as count FROM nodes").get();
+    const totalNodesCount = countRow ? Number(countRow.count) : 0;
     assert(totalNodesCount >= 60, `VERIFIED: Master pool contains ${totalNodesCount} challenges (>= 60)`);
 
-    const montyHall = db.prepare("SELECT answer FROM nodes WHERE node_code = 'NODE_NT_09'").get();
+    const montyHall = await db.prepare("SELECT answer FROM nodes WHERE node_code = 'NODE_NT_09'").get();
     assert(montyHall && montyHall.answer === '2/3', 'VERIFIED: Monty Hall puzzle answer is 2/3');
 
-    const bridgeU2 = db.prepare("SELECT answer FROM nodes WHERE node_code = 'NODE_NT_10'").get();
+    const bridgeU2 = await db.prepare("SELECT answer FROM nodes WHERE node_code = 'NODE_NT_10'").get();
     assert(bridgeU2 && bridgeU2.answer === '17', 'VERIFIED: Bridge lantern puzzle answer is 17');
 
-    const ropesTimer = db.prepare("SELECT answer FROM nodes WHERE node_code = 'NODE_NT_11'").get();
+    const ropesTimer = await db.prepare("SELECT answer FROM nodes WHERE node_code = 'NODE_NT_11'").get();
     assert(ropesTimer && ropesTimer.answer === '3', 'VERIFIED: Burning ropes timer ends answer is 3');
 
-    const poisonedWine = db.prepare("SELECT answer FROM nodes WHERE node_code = 'NODE_NT_12'").get();
+    const poisonedWine = await db.prepare("SELECT answer FROM nodes WHERE node_code = 'NODE_NT_12'").get();
     assert(poisonedWine && poisonedWine.answer === '10', 'VERIFIED: Poisoned wine binary test answer is 10');
 
-    const crosswordDorm = db.prepare("SELECT answer FROM nodes WHERE node_code = 'NODE_NT_14'").get();
+    const crosswordDorm = await db.prepare("SELECT answer FROM nodes WHERE node_code = 'NODE_NT_14'").get();
     assert(crosswordDorm && crosswordDorm.answer === 'dormitory', 'VERIFIED: Cryptic crossword anagram answer is dormitory');
 
-    const pinCodePeelamedu = db.prepare("SELECT answer FROM nodes WHERE node_code = 'NODE_NT_16'").get();
+    const pinCodePeelamedu = await db.prepare("SELECT answer FROM nodes WHERE node_code = 'NODE_NT_16'").get();
     assert(pinCodePeelamedu && pinCodePeelamedu.answer === '641004', 'VERIFIED: Peelamedu PSG Tech PIN code answer is 641004');
 
-    const rfcAvian = db.prepare("SELECT answer FROM nodes WHERE node_code = 'NODE_NT_17'").get();
+    const rfcAvian = await db.prepare("SELECT answer FROM nodes WHERE node_code = 'NODE_NT_17'").get();
     assert(rfcAvian && rfcAvian.answer === '1149', 'VERIFIED: RFC Avian Carrier protocol answer is 1149');
 
-    const gitEmptyTree = db.prepare("SELECT answer FROM nodes WHERE node_code = 'NODE_NT_24'").get();
+    const gitEmptyTree = await db.prepare("SELECT answer FROM nodes WHERE node_code = 'NODE_NT_24'").get();
     assert(gitEmptyTree && gitEmptyTree.answer === '4b825dc642cb6eb9a060e54bf8d69288fbee4904', 'VERIFIED: Git empty tree SHA-1 answer is 4b825dc642cb6eb9a060e54bf8d69288fbee4904');
 
-    const sevenBridges = db.prepare("SELECT answer FROM nodes WHERE node_code = 'NODE_NT_28'").get();
+    const sevenBridges = await db.prepare("SELECT answer FROM nodes WHERE node_code = 'NODE_NT_28'").get();
     assert(sevenBridges && sevenBridges.answer === 'graph theory', 'VERIFIED: Seven bridges of Königsberg answer is graph theory');
 
     // 11. Concurrency Load Benchmark (500+ Concurrent Requests)
@@ -294,7 +295,7 @@ async function runRigorousTests() {
       batch: '19MX',
       organization: 'Example Corp'
     };
-    db.prepare("DELETE FROM users WHERE email = ? OR phone = ?").run(passkeyAlumData.email, passkeyAlumData.phone);
+    await db.prepare("DELETE FROM users WHERE email = ? OR phone = ?").run(passkeyAlumData.email, passkeyAlumData.phone);
     
     const enrollAlum = await fetch(`${BASE}/api/admin/alumni`, {
       method: 'POST',
@@ -425,7 +426,7 @@ async function runRigorousTests() {
     assert(oldPassLogin.status === 401, 'AUTH: Old default phone password rejected after password change');
 
     // Clean up test alumnus from database so no scratch users remain
-    db.prepare("DELETE FROM users WHERE email = ? OR phone = ?").run(passkeyAlumData.email, passkeyAlumData.phone);
+    await db.prepare("DELETE FROM users WHERE email = ? OR phone = ?").run(passkeyAlumData.email, passkeyAlumData.phone);
 
     // 15: Game Master Admin Key Rotation & Revocation of login2026admin
     console.log('\n--- Verifying Admin Key Rotation & Revocation of login2026admin ---');
@@ -453,8 +454,8 @@ async function runRigorousTests() {
     assert(newAdminAttempt.status === 200, 'ADMIN: Login with new custom Game Master passkey succeeds');
 
     // Clean up: Reset back to default in db for clean state
-    db.prepare("UPDATE config SET value = 'login2026admin' WHERE key = 'admin_key'").run();
-    db.prepare("UPDATE users SET passkey = 'login2026admin' WHERE username = 'admin'").run();
+    await db.prepare("UPDATE config SET value = 'login2026admin' WHERE key = 'admin_key'").run();
+    await db.prepare("UPDATE users SET passkey = 'login2026admin' WHERE username = 'admin'").run();
 
     console.log('\n================================================================');
     console.log(`  ALL CRITICAL OBJECTIVES VERIFIED: ${passed} PASSED, ${failed} FAILED`);

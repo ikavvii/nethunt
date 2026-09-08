@@ -5,7 +5,7 @@ import { generateToken, requireAuth } from '../auth.js';
 export const authRouter = express.Router();
 
 // Alumni Login (Only pre-enrolled alumni by admin)
-authRouter.post('/login', (req, res) => {
+authRouter.post('/login', async (req, res) => {
   const { username, passkey } = req.body;
   if (!username || !passkey) {
     return res.status(400).json({ error: 'Registered Email, Phone number, or Username and Passkey are required.' });
@@ -15,7 +15,7 @@ authRouter.post('/login', (req, res) => {
   const digitsOnly = username.trim().replace(/[^0-9]/g, '');
 
   // Look up user by username, email, or phone number
-  const user = db.prepare(`
+  const user = await db.prepare(`
     SELECT * FROM users 
     WHERE role != 'admin' AND (
       LOWER(username) = ? 
@@ -56,7 +56,7 @@ authRouter.post('/login', (req, res) => {
   let path = [];
   try { path = JSON.parse(user.assigned_path_json || '[]'); } catch (e) {}
   if (!path || path.length === 0) {
-    path = assignPathToUser(user.id);
+    path = await assignPathToUser(user.id);
   }
 
   const mustChangePassword = (user.password_changed !== 1 && user.role !== 'admin');
@@ -84,10 +84,10 @@ authRouter.post('/login', (req, res) => {
 });
 
 // Admin Login
-authRouter.post('/admin-login', (req, res) => {
+authRouter.post('/admin-login', async (req, res) => {
   const { adminKey } = req.body;
   const envKey = process.env.ADMIN_KEY || process.env.ADMIN_PASSKEY;
-  const configKey = db.prepare("SELECT value FROM config WHERE key = 'admin_key'").get()?.value;
+  const configKey = (await db.prepare("SELECT value FROM config WHERE key = 'admin_key'").get())?.value;
 
   // Strict Single Key Enforcement:
   // 1. Environment variable ADMIN_KEY / ADMIN_PASSKEY has absolute priority.
@@ -99,15 +99,15 @@ authRouter.post('/admin-login', (req, res) => {
     return res.status(401).json({ error: 'Invalid Game Master Key' });
   }
 
-  let adminUser = db.prepare("SELECT * FROM users WHERE username = 'admin'").get();
+  let adminUser = await db.prepare("SELECT * FROM users WHERE username = 'admin'").get();
   if (!adminUser) {
-    const resId = db.prepare(`
+    const resId = await db.prepare(`
       INSERT INTO users (username, passkey, name, batch, email, role, created_at)
       VALUES ('admin', ?, 'LOGIN 2026 Game Master', 'Staff', 'admin@psgtech.ac.in', 'admin', ?)
     `).run(activeKey, Date.now());
-    adminUser = db.prepare("SELECT * FROM users WHERE id = ?").get(resId.lastInsertRowid);
+    adminUser = await db.prepare("SELECT * FROM users WHERE id = ?").get(resId.lastInsertRowid);
   } else if (adminUser.passkey !== activeKey) {
-    db.prepare("UPDATE users SET passkey = ? WHERE username = 'admin'").run(activeKey);
+    await db.prepare("UPDATE users SET passkey = ? WHERE username = 'admin'").run(activeKey);
   }
 
   const token = generateToken(adminUser);
@@ -136,15 +136,15 @@ authRouter.get('/me', requireAuth, (req, res) => {
 });
 
 // Change Password (First Login Prompt or User Settings)
-authRouter.post('/change-password', requireAuth, (req, res) => {
+authRouter.post('/change-password', requireAuth, async (req, res) => {
   const { newPassword } = req.body;
   if (!newPassword || typeof newPassword !== 'string' || newPassword.trim().length < 4) {
     return res.status(400).json({ error: 'New password must be at least 4 characters long.' });
   }
 
   const cleanPass = newPassword.trim();
-  db.prepare('UPDATE users SET passkey = ?, password_changed = 1 WHERE id = ?').run(cleanPass, req.user.id);
-  const updatedUser = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  await db.prepare('UPDATE users SET passkey = ?, password_changed = 1 WHERE id = ?').run(cleanPass, req.user.id);
+  const updatedUser = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
 
   return res.json({
     success: true,
@@ -158,15 +158,15 @@ authRouter.post('/change-password', requireAuth, (req, res) => {
 });
 
 // Alias for PIN / passkey update
-authRouter.post('/set-pin', requireAuth, (req, res) => {
+authRouter.post('/set-pin', requireAuth, async (req, res) => {
   const { newPasskey, newPassword } = req.body;
   const pass = (newPassword || newPasskey || '').trim();
   if (!pass || pass.length < 4) {
     return res.status(400).json({ error: 'Password must be at least 4 characters long.' });
   }
 
-  db.prepare('UPDATE users SET passkey = ?, password_changed = 1 WHERE id = ?').run(pass, req.user.id);
-  const updatedUser = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  await db.prepare('UPDATE users SET passkey = ?, password_changed = 1 WHERE id = ?').run(pass, req.user.id);
+  const updatedUser = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
 
   return res.json({
     success: true,
@@ -180,7 +180,7 @@ authRouter.post('/set-pin', requireAuth, (req, res) => {
 });
 
 // Self-Service Passkey Recovery (Verifies matching registered Email + Mobile Number)
-authRouter.post('/recover-passkey', (req, res) => {
+authRouter.post('/recover-passkey', async (req, res) => {
   const { email, phone } = req.body;
   if (!email || !phone) {
     return res.status(400).json({ error: 'Both registered Email and Mobile Number are required for passkey recovery.' });
@@ -194,7 +194,7 @@ authRouter.post('/recover-passkey', (req, res) => {
   }
 
   // Find user matching email AND phone digits
-  const user = db.prepare(`
+  const user = await db.prepare(`
     SELECT * FROM users
     WHERE role != 'admin'
       AND LOWER(email) = ?
@@ -213,7 +213,7 @@ authRouter.post('/recover-passkey', (req, res) => {
 
   // Reset passkey back to their clean phone number, and prompt for password change on next login
   const resetPasskey = (user.phone || phoneDigits).trim();
-  db.prepare('UPDATE users SET passkey = ?, password_changed = 0 WHERE id = ?').run(resetPasskey, user.id);
+  await db.prepare('UPDATE users SET passkey = ?, password_changed = 0 WHERE id = ?').run(resetPasskey, user.id);
 
   return res.json({
     success: true,

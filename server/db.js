@@ -1,4 +1,6 @@
-import { DatabaseSync } from 'node:sqlite';
+import dotenv from 'dotenv';
+dotenv.config();
+
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
@@ -6,29 +8,117 @@ import fs from 'node:fs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const isVercel = Boolean(process.env.VERCEL);
-const dataDir = isVercel ? path.join('/tmp', 'nethunt-data') : path.join(__dirname, 'data');
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+const tursoUrl = process.env.TURSO_DATABASE_URL;
+const tursoToken = process.env.TURSO_AUTH_TOKEN;
+
+let tursoClient = null;
+let sqliteDb = null;
+
+if (tursoUrl) {
+  const { createClient } = await import('@libsql/client/web');
+  tursoClient = createClient({
+    url: tursoUrl,
+    authToken: tursoToken,
+  });
+  console.log(`⚡ NetHunt Database: Connected to Turso Cloud (${tursoUrl})`);
+} else {
+  const { DatabaseSync } = await import('node:sqlite');
+  const isVercel = Boolean(process.env.VERCEL);
+  const dataDir = isVercel ? path.join('/tmp', 'nethunt-data') : path.join(__dirname, 'data');
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+  const dbPath = path.join(dataDir, 'nethunt.db');
+  sqliteDb = new DatabaseSync(dbPath);
+  try {
+    sqliteDb.exec(`
+      PRAGMA journal_mode = WAL;
+      PRAGMA foreign_keys = ON;
+    `);
+  } catch (e) {
+    // Non-fatal if in-memory or restricted
+  }
+  console.log(`⚡ NetHunt Database: Connected to Local SQLite (${dbPath})`);
 }
 
-const dbPath = path.join(dataDir, 'nethunt.db');
-export const db = new DatabaseSync(dbPath);
+function normalizeArgs(args) {
+  if (args.length === 1 && Array.isArray(args[0])) {
+    return args[0];
+  }
+  return args;
+}
 
-db.exec(`
-  PRAGMA journal_mode = WAL;
-  PRAGMA foreign_keys = ON;
-`);
+export const db = {
+  isTurso: Boolean(tursoUrl),
+  tursoClient,
+  sqliteDb,
 
-export function initDatabase() {
-  db.exec(`
+  async get(sql, ...args) {
+    const flatArgs = normalizeArgs(args);
+    if (tursoClient) {
+      const res = await tursoClient.execute({ sql, args: flatArgs });
+      return res.rows && res.rows.length > 0 ? { ...res.rows[0] } : undefined;
+    }
+    return sqliteDb.prepare(sql).get(...flatArgs);
+  },
+
+  async all(sql, ...args) {
+    const flatArgs = normalizeArgs(args);
+    if (tursoClient) {
+      const res = await tursoClient.execute({ sql, args: flatArgs });
+      return (res.rows || []).map(r => ({ ...r }));
+    }
+    return sqliteDb.prepare(sql).all(...flatArgs);
+  },
+
+  async run(sql, ...args) {
+    const flatArgs = normalizeArgs(args);
+    if (tursoClient) {
+      const res = await tursoClient.execute({ sql, args: flatArgs });
+      return {
+        changes: Number(res.rowsAffected || 0),
+        lastInsertRowid: Number(res.lastInsertRowid || 0)
+      };
+    }
+    const info = sqliteDb.prepare(sql).run(...flatArgs);
+    return {
+      changes: Number(info.changes || 0),
+      lastInsertRowid: Number(info.lastInsertRowid || 0)
+    };
+  },
+
+  async exec(sql) {
+    if (tursoClient) {
+      await tursoClient.executeMultiple(sql);
+      return;
+    }
+    sqliteDb.exec(sql);
+  },
+
+  prepare(sql) {
+    return {
+      async get(...args) {
+        return db.get(sql, ...args);
+      },
+      async all(...args) {
+        return db.all(sql, ...args);
+      },
+      async run(...args) {
+        return db.run(sql, ...args);
+      }
+    };
+  }
+};
+
+export async function initDatabase() {
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS config (
       key TEXT PRIMARY KEY,
       value TEXT
     );
   `);
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT UNIQUE NOT NULL,
@@ -51,21 +141,21 @@ export function initDatabase() {
 
   // Schema migration for existing databases: phone, organization, face biometrics & anti-proxy
   try {
-    const userColumns = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);
-    if (!userColumns.includes('phone')) db.exec("ALTER TABLE users ADD COLUMN phone TEXT;");
-    if (!userColumns.includes('organization')) db.exec("ALTER TABLE users ADD COLUMN organization TEXT;");
-    if (!userColumns.includes('face_photo')) db.exec("ALTER TABLE users ADD COLUMN face_photo TEXT;");
-    if (!userColumns.includes('face_verified_at')) db.exec("ALTER TABLE users ADD COLUMN face_verified_at INTEGER;");
-    if (!userColumns.includes('last_face_photo')) db.exec("ALTER TABLE users ADD COLUMN last_face_photo TEXT;");
-    if (!userColumns.includes('last_face_at')) db.exec("ALTER TABLE users ADD COLUMN last_face_at INTEGER;");
-    if (!userColumns.includes('password_changed')) db.exec("ALTER TABLE users ADD COLUMN password_changed INTEGER DEFAULT 0;");
+    const userColumns = (await db.prepare("PRAGMA table_info(users)").all()).map(c => c.name);
+    if (!userColumns.includes('phone')) await db.exec("ALTER TABLE users ADD COLUMN phone TEXT;");
+    if (!userColumns.includes('organization')) await db.exec("ALTER TABLE users ADD COLUMN organization TEXT;");
+    if (!userColumns.includes('face_photo')) await db.exec("ALTER TABLE users ADD COLUMN face_photo TEXT;");
+    if (!userColumns.includes('face_verified_at')) await db.exec("ALTER TABLE users ADD COLUMN face_verified_at INTEGER;");
+    if (!userColumns.includes('last_face_photo')) await db.exec("ALTER TABLE users ADD COLUMN last_face_photo TEXT;");
+    if (!userColumns.includes('last_face_at')) await db.exec("ALTER TABLE users ADD COLUMN last_face_at INTEGER;");
+    if (!userColumns.includes('password_changed')) await db.exec("ALTER TABLE users ADD COLUMN password_changed INTEGER DEFAULT 0;");
   } catch (e) {
     console.error('Migration warning (users table):', e.message);
   }
 
   // Partial unique indexes to strictly prevent duplicate alums
   try {
-    db.exec(`
+    await db.exec(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_users_unique_phone 
       ON users(phone) WHERE phone IS NOT NULL AND role != 'admin';
 
@@ -77,12 +167,16 @@ export function initDatabase() {
   }
 
   // Performance Index for 500+ Concurrent Players
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_leaderboard_perf 
-    ON users(score DESC, current_step DESC, last_solved_subms ASC);
-  `);
+  try {
+    await db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_leaderboard_perf 
+      ON users(score DESC, current_step DESC, last_solved_subms ASC);
+    `);
+  } catch (e) {
+    console.error('Index creation warning (leaderboard perf):', e.message);
+  }
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS nodes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       node_code TEXT UNIQUE NOT NULL,
@@ -102,7 +196,7 @@ export function initDatabase() {
     );
   `);
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS user_node_progress (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -119,7 +213,7 @@ export function initDatabase() {
     );
   `);
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS submissions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -135,7 +229,7 @@ export function initDatabase() {
     );
   `);
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS proctor_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -147,51 +241,71 @@ export function initDatabase() {
     );
   `);
 
-  seedSystem();
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS shoutbox (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      username TEXT NOT NULL,
+      name TEXT NOT NULL,
+      batch TEXT NOT NULL,
+      avatar TEXT,
+      message TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+  `);
+
+  await seedSystem();
 }
 
-function seedSystem() {
+async function seedSystem() {
   const setConfig = db.prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)');
   const getConfig = db.prepare('SELECT value FROM config WHERE key = ?');
 
-  if (!getConfig.get('event_status')) setConfig.run('event_status', 'active');
-  if (!getConfig.get('admin_key')) setConfig.run('admin_key', process.env.ADMIN_KEY || process.env.ADMIN_PASSKEY || 'login2026admin');
+  const evStatus = await getConfig.get('event_status');
+  if (!evStatus) await setConfig.run('event_status', 'active');
+
+  const admKey = await getConfig.get('admin_key');
+  if (!admKey) await setConfig.run('admin_key', process.env.ADMIN_KEY || process.env.ADMIN_PASSKEY || 'login2026admin');
   
   // Level up default trajectory to 20 nodes
-  setConfig.run('path_length', '20');
+  await setConfig.run('path_length', '20');
 
-  if (!getConfig.get('event_end_time')) {
-    setConfig.run('event_end_time', String(Date.now() + 48 * 60 * 60 * 1000));
+  const evEndTime = await getConfig.get('event_end_time');
+  if (!evEndTime) {
+    await setConfig.run('event_end_time', String(Date.now() + 48 * 60 * 60 * 1000));
   }
 
   // Admin user
-  const adminUser = db.prepare("SELECT id FROM users WHERE username = 'admin'").get();
+  const adminUser = await db.prepare("SELECT id FROM users WHERE username = 'admin'").get();
   if (!adminUser) {
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO users (username, passkey, name, batch, email, role, created_at)
       VALUES ('admin', 'login2026admin', 'Game Master', 'Organizer', 'login2026@psgtech.ac.in', 'admin', ?)
     `).run(Date.now());
   }
 
   // Populate master pool of 60 deep analytical, lateral, verbal, and sleuth challenges
-  const count = db.prepare('SELECT COUNT(*) as count FROM nodes').get().count;
-  const hasNt28 = db.prepare("SELECT id FROM nodes WHERE node_code = 'NODE_NT_28'").get();
-  const fd2 = db.prepare("SELECT clue_text FROM nodes WHERE node_code = 'NODE_FD_02'").get();
+  const countRow = await db.prepare('SELECT COUNT(*) as count FROM nodes').get();
+  const count = countRow ? Number(countRow.count) : 0;
+  const hasNt28 = await db.prepare("SELECT id FROM nodes WHERE node_code = 'NODE_NT_28'").get();
+  const fd2 = await db.prepare("SELECT clue_text FROM nodes WHERE node_code = 'NODE_FD_02'").get();
   if (count < 60 || !hasNt28 || !fd2?.clue_text?.includes('(2,4), (2,2)')) {
-    db.exec('DELETE FROM nodes');
-    populateAnalyticalMasterNodes();
+    await db.exec('DELETE FROM nodes');
+    await populateAnalyticalMasterNodes();
   }
 }
 
-export function assignPathToUser(userId) {
-  const pathLength = parseInt(db.prepare("SELECT value FROM config WHERE key = 'path_length'").get()?.value || '20');
+export async function assignPathToUser(userId) {
+  const pathLengthRow = await db.prepare("SELECT value FROM config WHERE key = 'path_length'").get();
+  const pathLength = parseInt(pathLengthRow?.value || '20');
   
-  const foundationNodes = db.prepare("SELECT id FROM nodes WHERE tier = 'foundation' ORDER BY id ASC").all().map(n => n.id);
-  const lateralNodes = db.prepare("SELECT id FROM nodes WHERE tier = 'lateral' ORDER BY id ASC").all().map(n => n.id);
-  const intermediateNodes = db.prepare("SELECT id FROM nodes WHERE tier = 'intermediate' ORDER BY id ASC").all().map(n => n.id);
-  const verbalNodes = db.prepare("SELECT id FROM nodes WHERE tier = 'verbal' OR tier = 'sleuth' ORDER BY id ASC").all().map(n => n.id);
-  const advancedNodes = db.prepare("SELECT id FROM nodes WHERE tier = 'advanced' ORDER BY id ASC").all().map(n => n.id);
-  const grandmasterNodes = db.prepare("SELECT id FROM nodes WHERE tier = 'grandmaster' ORDER BY id ASC").all().map(n => n.id);
+  const foundationNodes = (await db.prepare("SELECT id FROM nodes WHERE tier = 'foundation' ORDER BY id ASC").all()).map(n => n.id);
+  const lateralNodes = (await db.prepare("SELECT id FROM nodes WHERE tier = 'lateral' ORDER BY id ASC").all()).map(n => n.id);
+  const intermediateNodes = (await db.prepare("SELECT id FROM nodes WHERE tier = 'intermediate' ORDER BY id ASC").all()).map(n => n.id);
+  const verbalNodes = (await db.prepare("SELECT id FROM nodes WHERE tier = 'verbal' OR tier = 'sleuth' ORDER BY id ASC").all()).map(n => n.id);
+  const advancedNodes = (await db.prepare("SELECT id FROM nodes WHERE tier = 'advanced' ORDER BY id ASC").all()).map(n => n.id);
+  const grandmasterNodes = (await db.prepare("SELECT id FROM nodes WHERE tier = 'grandmaster' ORDER BY id ASC").all()).map(n => n.id);
 
   function fyShuffle(arr) {
     const copy = [...arr];
@@ -269,22 +383,22 @@ export function assignPathToUser(userId) {
   }
 
   const jsonPath = JSON.stringify(deduped);
-  db.prepare("UPDATE users SET assigned_path_json = ?, current_step = 0 WHERE id = ?").run(jsonPath, userId);
+  await db.prepare("UPDATE users SET assigned_path_json = ?, current_step = 0 WHERE id = ?").run(jsonPath, userId);
   return deduped;
 }
 
 // === NODE CRUD HELPERS ===
-export function getAllNodes() {
+export async function getAllNodes() {
   return db.prepare("SELECT * FROM nodes ORDER BY tier ASC, id ASC").all();
 }
 
-export function createNode(data) {
+export async function createNode(data) {
   const insert = db.prepare(`
     INSERT INTO nodes (
       node_code, title, tier, domain, story, clue_text, clue_payload, media_type, answer, aliases_json, near_misses_json, hints_json, base_points
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
-  const res = insert.run(
+  const res = await insert.run(
     data.node_code || data.code,
     data.title,
     data.tier || 'foundation',
@@ -302,13 +416,13 @@ export function createNode(data) {
   return res.lastInsertRowid;
 }
 
-export function updateNode(id, data) {
+export async function updateNode(id, data) {
   const update = db.prepare(`
     UPDATE nodes SET
       node_code = ?, title = ?, tier = ?, domain = ?, story = ?, clue_text = ?, clue_payload = ?, answer = ?, aliases_json = ?, near_misses_json = ?, hints_json = ?, base_points = ?
     WHERE id = ?
   `);
-  update.run(
+  await update.run(
     data.node_code || data.code,
     data.title,
     data.tier,
@@ -325,7 +439,7 @@ export function updateNode(id, data) {
   );
 }
 
-export function deleteNode(id) {
+export async function deleteNode(id) {
   return db.prepare("DELETE FROM nodes WHERE id = ?").run(id);
 }
 
@@ -335,7 +449,7 @@ export function calculateNodePoints(basePoints, hintsUnlocked) {
   return Math.round(basePoints * multipliers[idx]);
 }
 
-function populateAnalyticalMasterNodes() {
+async function populateAnalyticalMasterNodes() {
   const insert = db.prepare(`
     INSERT INTO nodes (
       node_code, title, tier, domain, story, clue_text, clue_payload, media_type, answer, aliases_json, near_misses_json, hints_json, base_points
@@ -1660,21 +1774,45 @@ function populateAnalyticalMasterNodes() {
     }
   ];
 
-  for (const n of masterNodes) {
-    insert.run(
-      n.code,
-      n.title,
-      n.tier,
-      n.domain,
-      n.story,
-      n.clue_text,
-      n.payload || '',
-      n.media_type || 'text',
-      n.answer,
-      JSON.stringify(n.aliases || []),
-      JSON.stringify(n.near_misses || {}),
-      JSON.stringify(n.hints || []),
-      n.points || 1000
-    );
+  if (db.isTurso && db.tursoClient) {
+    const batchStatements = masterNodes.map(n => ({
+      sql: `INSERT INTO nodes (
+        node_code, title, tier, domain, story, clue_text, clue_payload, media_type, answer, aliases_json, near_misses_json, hints_json, base_points
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        n.code,
+        n.title,
+        n.tier,
+        n.domain,
+        n.story,
+        n.clue_text,
+        n.payload || '',
+        n.media_type || 'text',
+        n.answer,
+        JSON.stringify(n.aliases || []),
+        JSON.stringify(n.near_misses || {}),
+        JSON.stringify(n.hints || []),
+        n.points || 1000
+      ]
+    }));
+    await db.tursoClient.batch(batchStatements, 'write');
+  } else {
+    for (const n of masterNodes) {
+      await insert.run(
+        n.code,
+        n.title,
+        n.tier,
+        n.domain,
+        n.story,
+        n.clue_text,
+        n.payload || '',
+        n.media_type || 'text',
+        n.answer,
+        JSON.stringify(n.aliases || []),
+        JSON.stringify(n.near_misses || {}),
+        JSON.stringify(n.hints || []),
+        n.points || 1000
+      );
+    }
   }
 }

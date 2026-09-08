@@ -18,65 +18,77 @@ class LeaderboardCache {
   }
 
   // Atomically rebuild in-memory rankings from DB
-  refreshNow() {
-    const users = db.prepare(`
-      SELECT id, username, name, batch, organization, role, current_step, score, tab_violations, last_solved_subms
-      FROM users
-      WHERE role != 'admin'
-      ORDER BY score DESC, current_step DESC, last_solved_subms ASC, id ASC
-    `).all();
+  async refreshNow() {
+    if (this.refreshingPromise) return this.refreshingPromise;
 
-    this.cachedLeaderboard = users.map((u, idx) => ({
-      rank: idx + 1,
-      id: u.id,
-      username: u.username,
-      name: u.name,
-      batch: u.batch,
-      organization: u.organization || '',
-      current_step: u.current_step,
-      score: u.score,
-      tab_violations: u.tab_violations,
-      last_solved_subms: u.last_solved_subms || 0
-    }));
+    this.refreshingPromise = (async () => {
+      try {
+        const users = await db.prepare(`
+          SELECT id, username, name, batch, organization, role, current_step, score, tab_violations, last_solved_subms
+          FROM users
+          WHERE role != 'admin'
+          ORDER BY score DESC, current_step DESC, last_solved_subms ASC, id ASC
+        `).all();
 
-    // Aggregate batches in memory without hitting disk
-    const batchMap = new Map();
-    for (const u of this.cachedLeaderboard) {
-      if (!u.batch) continue;
-      const existing = batchMap.get(u.batch) || {
-        batch: u.batch,
-        totalParticipants: 0,
-        totalScore: 0,
-        totalSteps: 0,
-        maxStep: 0
-      };
-      existing.totalParticipants += 1;
-      existing.totalScore += u.score;
-      existing.totalSteps += u.current_step;
-      existing.maxStep = Math.max(existing.maxStep, u.current_step);
-      batchMap.set(u.batch, existing);
-    }
+        this.cachedLeaderboard = users.map((u, idx) => ({
+          rank: idx + 1,
+          id: u.id,
+          username: u.username,
+          name: u.name,
+          batch: u.batch,
+          organization: u.organization || '',
+          current_step: u.current_step,
+          score: u.score,
+          tab_violations: u.tab_violations,
+          last_solved_subms: u.last_solved_subms || 0
+        }));
 
-    const batchArr = Array.from(batchMap.values()).map(b => ({
-      ...b,
-      avgStep: Math.round((b.totalSteps / Math.max(1, b.totalParticipants)) * 10) / 10
-    }));
+        // Aggregate batches in memory without hitting disk
+        const batchMap = new Map();
+        for (const u of this.cachedLeaderboard) {
+          if (!u.batch) continue;
+          const existing = batchMap.get(u.batch) || {
+            batch: u.batch,
+            totalParticipants: 0,
+            totalScore: 0,
+            totalSteps: 0,
+            maxStep: 0
+          };
+          existing.totalParticipants += 1;
+          existing.totalScore += u.score;
+          existing.totalSteps += u.current_step;
+          existing.maxStep = Math.max(existing.maxStep, u.current_step);
+          batchMap.set(u.batch, existing);
+        }
 
-    batchArr.sort((a, b) => b.totalScore - a.totalScore || b.totalParticipants - a.totalParticipants);
-    this.cachedBatches = batchArr.map((b, idx) => ({ rank: idx + 1, ...b }));
-    this.lastRefreshed = Date.now();
+        const batchArr = Array.from(batchMap.values()).map(b => ({
+          ...b,
+          avgStep: Math.round((b.totalSteps / Math.max(1, b.totalParticipants)) * 10) / 10
+        }));
+
+        batchArr.sort((a, b) => b.totalScore - a.totalScore || b.totalParticipants - a.totalParticipants);
+        this.cachedBatches = batchArr.map((b, idx) => ({ rank: idx + 1, ...b }));
+        this.lastRefreshed = Date.now();
+      } catch (err) {
+        console.error('Leaderboard refresh error:', err);
+      } finally {
+        this.refreshingPromise = null;
+      }
+    })();
+
+    return this.refreshingPromise;
   }
 
-  getLeaderboard() {
+  async getLeaderboard() {
     if (Date.now() - this.lastRefreshed > this.refreshIntervalMs || this.cachedLeaderboard.length === 0) {
-      this.refreshNow();
+      await this.refreshNow();
     }
     return this.cachedLeaderboard;
   }
 
-  getBatches() {
+  async getBatches() {
     if (Date.now() - this.lastRefreshed > this.refreshIntervalMs || this.cachedBatches.length === 0) {
-      this.refreshNow();
+      await this.refreshNow();
     }
     return this.cachedBatches;
   }

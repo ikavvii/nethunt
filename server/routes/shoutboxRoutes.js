@@ -6,8 +6,8 @@ import { broadcastEvent } from '../events.js';
 export const shoutboxRouter = express.Router();
 
 // GET recent memories
-shoutboxRouter.get('/', (req, res) => {
-  const messages = db.prepare(`
+shoutboxRouter.get('/', async (req, res) => {
+  const messages = await db.prepare(`
     SELECT id, user_id, username, name, batch, avatar, message, created_at
     FROM shoutbox
     ORDER BY created_at DESC
@@ -18,7 +18,7 @@ shoutboxRouter.get('/', (req, res) => {
 });
 
 // POST new memory note
-shoutboxRouter.post('/', requireAuth, (req, res) => {
+shoutboxRouter.post('/', requireAuth, async (req, res) => {
   const user = req.user;
   const { message } = req.body;
 
@@ -34,7 +34,7 @@ shoutboxRouter.post('/', requireAuth, (req, res) => {
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
 
-  const result = insert.run(
+  const result = await insert.run(
     user.id,
     user.username,
     user.name,
