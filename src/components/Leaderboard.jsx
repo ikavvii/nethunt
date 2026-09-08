@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Trophy, Search, Filter, RefreshCw, Award, Shield } from 'lucide-react';
+import { Trophy, Search, Filter, RefreshCw, Award, Shield, Layers, X } from 'lucide-react';
 
 export default function Leaderboard() {
   const { user } = useAuth();
@@ -11,6 +11,7 @@ export default function Leaderboard() {
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState(null);
+  const [showBatchModal, setShowBatchModal] = useState(false);
 
   const fetchStandings = async (manual = false) => {
     try {
@@ -84,26 +85,8 @@ export default function Leaderboard() {
         </div>
       </div>
 
-      {/* Batch Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {batches.slice(0, 4).map((b) => (
-          <div key={b.batch} className="theme-bg-card border theme-border p-5 rounded-xl shadow-sm space-y-1.5">
-            <span className="text-xs font-mono font-black text-amber-500 dark:text-amber-400 uppercase tracking-wider">
-              [ {b.batch} ]
-            </span>
-            <div className="flex justify-between items-baseline">
-              <span className="text-2xl font-black theme-metric-value font-mono">{b.totalScore} PTS</span>
-              <span className="text-xs theme-text-muted font-mono font-bold">{b.totalParticipants} ALUMS</span>
-            </div>
-            <p className="text-xs theme-text-muted font-mono">
-              AVG_STEP: <strong className="theme-text-primary">{b.avgStep}</strong>
-            </p>
-          </div>
-        ))}
-      </div>
-
-      {/* Filter Bar */}
-      <div className="theme-bg-card border theme-border p-4 rounded-xl flex flex-col sm:flex-row gap-3 shadow-sm">
+      {/* Filter Bar with On-Demand Batch Standings Trigger */}
+      <div className="theme-bg-card border theme-border p-4 rounded-xl flex flex-col sm:flex-row gap-3 shadow-sm items-stretch sm:items-center">
         <div className="relative flex-1">
           <Search className="w-5 h-5 text-cyan-600 dark:text-cyan-400 absolute left-3.5 top-3.5" />
           <input
@@ -115,18 +98,30 @@ export default function Leaderboard() {
           />
         </div>
 
-        <div className="flex items-center space-x-2">
-          <Filter className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
-          <select
-            value={batchFilter}
-            onChange={(e) => setBatchFilter(e.target.value)}
-            className="px-4 py-3 rounded-xl theme-bg-surface border theme-border theme-text-primary text-sm focus:outline-none focus:border-cyan-400 font-mono shadow-inner cursor-pointer font-bold"
+        <div className="flex items-center space-x-2.5">
+          {/* On-Demand Batch Standings Modal Button */}
+          <button
+            onClick={() => setShowBatchModal(true)}
+            className="px-4 py-3 rounded-xl border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-xs sm:text-sm font-mono font-bold flex items-center space-x-2 transition-all cursor-pointer shadow-sm text-amber-600 dark:text-amber-400 whitespace-nowrap"
+            title="Open batch-wise standing cards and pooled scores"
           >
-            <option value="ALL">ALL BATCHES</option>
-            {uniqueBatches.map(b => (
-              <option key={b} value={b}>{b}</option>
-            ))}
-          </select>
+            <Layers className="w-4 h-4 text-amber-500" />
+            <span>[ BATCH STANDINGS ({batches.length}) ]</span>
+          </button>
+
+          <div className="flex items-center space-x-2">
+            <Filter className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
+            <select
+              value={batchFilter}
+              onChange={(e) => setBatchFilter(e.target.value)}
+              className="px-4 py-3 rounded-xl theme-bg-surface border theme-border theme-text-primary text-sm focus:outline-none focus:border-cyan-400 font-mono shadow-inner cursor-pointer font-bold"
+            >
+              <option value="ALL">ALL BATCHES</option>
+              {uniqueBatches.map(b => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -217,6 +212,116 @@ export default function Leaderboard() {
           </table>
         </div>
       </div>
+
+      {/* Batch-wise Standings On-Demand Modal (Listing ALL Batches) */}
+      {showBatchModal && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
+          onClick={() => setShowBatchModal(false)}
+        >
+          <div 
+            className="theme-bg-card border theme-border rounded-3xl max-w-4xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-5 sm:p-6 border-b theme-border flex items-center justify-between theme-bg-surface">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-500 flex items-center justify-center flex-shrink-0">
+                  <Layers className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-mono font-black text-base sm:text-lg theme-text-primary uppercase tracking-wider">
+                    BATCH-WISE TELEMETRY &amp; STANDINGS
+                  </h3>
+                  <p className="text-xs font-mono theme-text-muted mt-0.5">
+                    Aggregated telemetry across all {batches.length} participating MCA batches. Click any card to filter.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowBatchModal(false)}
+                className="p-2 rounded-xl border theme-border theme-text-muted hover:theme-text-primary hover:theme-bg-card transition-colors cursor-pointer"
+                title="Close modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body: ALL Batch Cards Grid */}
+            <div className="p-5 sm:p-6 overflow-y-auto space-y-4">
+              {batches.length === 0 ? (
+                <div className="text-center py-12 theme-text-muted font-mono text-sm">
+                  No batch telemetry recorded yet.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
+                  {batches.map((b) => {
+                    const isFiltered = batchFilter === b.batch;
+                    return (
+                      <div
+                        key={b.batch}
+                        onClick={() => {
+                          setBatchFilter(isFiltered ? 'ALL' : b.batch);
+                          setShowBatchModal(false);
+                        }}
+                        className={`border p-4 sm:p-5 rounded-2xl transition-all cursor-pointer space-y-2.5 relative group ${
+                          isFiltered
+                            ? 'bg-amber-500/15 border-amber-500 shadow-md ring-1 ring-amber-500/50'
+                            : 'theme-bg-surface theme-border hover:border-amber-500/50 hover:shadow-lg'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-mono font-black text-amber-500 dark:text-amber-400 uppercase tracking-wider">
+                            [ {b.batch} ]
+                          </span>
+                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-slate-800 border theme-border text-[11px] font-mono font-bold theme-text-muted">
+                            #{b.rank}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between items-baseline">
+                          <span className="text-2xl font-black theme-metric-value font-mono">
+                            {b.totalScore.toLocaleString()} PTS
+                          </span>
+                          <span className="text-xs font-mono font-bold theme-text-secondary">
+                            {b.totalParticipants} ALUMS
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-2 border-t theme-border text-xs font-mono theme-text-muted">
+                          <span>AVG_STEP: <strong className="theme-text-primary">{b.avgStep}</strong></span>
+                          <span>MAX_STEP: <strong className="theme-text-primary">{b.maxStep}</strong></span>
+                        </div>
+
+                        <div className="text-[11px] font-mono text-cyan-600 dark:text-cyan-400 group-hover:underline text-right pt-0.5">
+                          {isFiltered ? 'Active Filter (Click to Reset)' : 'Filter by this batch'}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t theme-border flex items-center justify-between theme-bg-surface text-xs font-mono">
+              <span className="theme-text-muted">
+                Showing all <strong className="theme-text-primary">{batches.length}</strong> batches &bull; Total participants:{' '}
+                <strong className="theme-text-primary">
+                  {batches.reduce((sum, b) => sum + (b.totalParticipants || 0), 0)}
+                </strong>
+              </span>
+              <button
+                onClick={() => setShowBatchModal(false)}
+                className="px-5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold font-mono text-xs uppercase cursor-pointer transition-all shadow-sm"
+              >
+                [ CLOSE ]
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
