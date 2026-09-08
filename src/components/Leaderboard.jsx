@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { Trophy, Search, Filter, RefreshCw, Award, Shield, Layers, X } from 'lucide-react';
 
 export default function Leaderboard() {
-  const { user } = useAuth();
+  const { user, eventStatus } = useAuth();
   const [leaderboard, setLeaderboard] = useState([]);
   const [batches, setBatches] = useState([]);
   const [search, setSearch] = useState('');
@@ -68,11 +68,25 @@ export default function Leaderboard() {
 
         <div className="flex items-center space-x-3">
           {/* Live Dynamic Feed Indicator */}
-          <div className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 font-mono text-xs font-bold shadow-sm">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="tracking-wide">LIVE DYNAMIC SYNC (3S)</span>
-            {lastSyncTime && <span className="opacity-75 hidden md:inline">[{lastSyncTime}]</span>}
-          </div>
+          {eventStatus === 'paused' ? (
+            <div className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-500 dark:text-amber-300 font-mono text-xs font-bold shadow-sm">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+              <span className="tracking-wide">EVENT PAUSED</span>
+              {lastSyncTime && <span className="opacity-75 hidden md:inline">[{lastSyncTime}]</span>}
+            </div>
+          ) : eventStatus === 'ended' || eventStatus === 'stopped' ? (
+            <div className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-500 dark:text-rose-300 font-mono text-xs font-bold shadow-sm">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-400" />
+              <span className="tracking-wide">CONCLUDED // FINAL STANDINGS</span>
+              {lastSyncTime && <span className="opacity-75 hidden md:inline">[{lastSyncTime}]</span>}
+            </div>
+          ) : (
+            <div className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 font-mono text-xs font-bold shadow-sm">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="tracking-wide">LIVE DYNAMIC SYNC (3S)</span>
+              {lastSyncTime && <span className="opacity-75 hidden md:inline">[{lastSyncTime}]</span>}
+            </div>
+          )}
 
           <button
             onClick={() => fetchStandings(true)}

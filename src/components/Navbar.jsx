@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 
 export default function Navbar({ activeTab, setActiveTab, onOpenAuth }) {
-  const { user, logout } = useAuth();
+  const { user, logout, eventStatus } = useAuth();
   const { theme, setTheme, themes } = useTheme();
 
   const currentThemeObj = themes.find(t => t.id === theme) || themes[0];
@@ -87,6 +87,19 @@ export default function Navbar({ activeTab, setActiveTab, onOpenAuth }) {
                   <Sliders className="w-4 h-4 text-amber-400" />
                   <span>[ ADMIN_SYS ]</span>
                 </button>
+              )}
+
+              {eventStatus === 'paused' && (
+                <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-amber-500/15 text-amber-400 border border-amber-500/40 flex items-center space-x-1.5 shadow-sm ml-1">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                  <span>PAUSED</span>
+                </span>
+              )}
+              {(eventStatus === 'ended' || eventStatus === 'stopped') && (
+                <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-rose-500/15 text-rose-400 border border-rose-500/40 flex items-center space-x-1.5 shadow-sm ml-1">
+                  <span className="w-2 h-2 rounded-full bg-rose-400" />
+                  <span>ENDED</span>
+                </span>
               )}
             </nav>
 

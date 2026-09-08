@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { initDatabase } from './db.js';
+import { initDatabase, db } from './db.js';
 import { registerSSEClient } from './events.js';
 import { authRouter } from './routes/authRoutes.js';
 import { huntRouter } from './routes/huntRoutes.js';
@@ -27,6 +27,16 @@ app.use(express.json());
 
 // Real-time Event Stream (Server-Sent Events)
 app.get('/api/events/stream', registerSSEClient);
+
+// Event Status Endpoint (Public)
+app.get('/api/events/status', async (req, res) => {
+  try {
+    const evStatus = (await db.prepare("SELECT value FROM config WHERE key = 'event_status'").get())?.value || 'active';
+    res.json({ status: evStatus });
+  } catch (e) {
+    res.json({ status: 'active' });
+  }
+});
 
 // API Routers
 app.use('/api/auth', authRouter);

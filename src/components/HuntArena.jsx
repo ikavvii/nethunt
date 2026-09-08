@@ -13,11 +13,13 @@ import {
   Trophy,
   Activity,
   Layers,
-  Clock
+  Clock,
+  Pause,
+  Square
 } from 'lucide-react';
 
 export default function HuntArena({ onOpenAuth }) {
-  const { user, token, refreshUser } = useAuth();
+  const { user, token, refreshUser, eventStatus: authEventStatus, setEventStatus } = useAuth();
 
   const [currentNodeData, setCurrentNodeData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -29,6 +31,10 @@ export default function HuntArena({ onOpenAuth }) {
   const [copiedPayload, setCopiedPayload] = useState(false);
 
   const inputRef = useRef(null);
+
+  const effectiveStatus = currentNodeData?.eventStatus || authEventStatus || 'active';
+  const isPaused = effectiveStatus === 'paused';
+  const isEnded = effectiveStatus === 'ended' || effectiveStatus === 'stopped';
 
   const fetchCurrentNode = async () => {
     if (!token) {
@@ -42,6 +48,9 @@ export default function HuntArena({ onOpenAuth }) {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
+      if (data.eventStatus && setEventStatus) {
+        setEventStatus(data.eventStatus);
+      }
       setCurrentNodeData(data);
       setFeedback(null);
     } catch (err) {
@@ -64,6 +73,20 @@ export default function HuntArena({ onOpenAuth }) {
 
   const handleSubmit = async (e) => {
     e?.preventDefault();
+    if (isPaused) {
+      setFeedback({
+        type: 'error',
+        message: 'Event is currently paused by organizers. Submissions are temporarily on hold.'
+      });
+      return;
+    }
+    if (isEnded) {
+      setFeedback({
+        type: 'error',
+        message: 'LOGIN Nethunt event has concluded. Submissions are closed.'
+      });
+      return;
+    }
     if (!answerInput.trim() || submitting || cooldownSeconds > 0) return;
 
     setSubmitting(true);
@@ -81,9 +104,20 @@ export default function HuntArena({ onOpenAuth }) {
 
       const data = await res.json();
 
-      if (res.status === 429) {
-        setFeedback({ type: 'error', message: data.error });
-        setCooldownSeconds(data.retryAfter || 60);
+      // Handle server rejection or status blocks
+      if (!res.ok) {
+        if (data.eventStatus && setEventStatus) {
+          setEventStatus(data.eventStatus);
+        }
+        if (res.status === 429) {
+          setFeedback({ type: 'error', message: data.error || 'Rate limit reached. Please wait.' });
+          setCooldownSeconds(data.retryAfter || 60);
+          return;
+        }
+        setFeedback({
+          type: 'error',
+          message: data.error || data.message || 'Verification failed. Review the cipher or unlock a progressive hint.'
+        });
         return;
       }
 
@@ -97,7 +131,7 @@ export default function HuntArena({ onOpenAuth }) {
 
         setFeedback({
           type: 'success',
-          message: data.message
+          message: data.message || 'Decryption verified! Advancing to next challenge.'
         });
 
         setAnswerInput('');
@@ -117,7 +151,7 @@ export default function HuntArena({ onOpenAuth }) {
         });
       }
     } catch (err) {
-      setFeedback({ type: 'error', message: 'Network connection failed.' });
+      setFeedback({ type: 'error', message: 'Network connection failed. Please check connection.' });
     } finally {
       setSubmitting(false);
     }
@@ -125,6 +159,20 @@ export default function HuntArena({ onOpenAuth }) {
 
   const handleUnlockHint = async () => {
     if (!token || unlockingHint) return;
+    if (isPaused) {
+      setFeedback({
+        type: 'error',
+        message: 'Event is currently paused by organizers. Hint unlocks are temporarily on hold.'
+      });
+      return;
+    }
+    if (isEnded) {
+      setFeedback({
+        type: 'error',
+        message: 'LOGIN Nethunt event has concluded. Hint unlocks are closed.'
+      });
+      return;
+    }
 
     setUnlockingHint(true);
     try {
@@ -138,9 +186,17 @@ export default function HuntArena({ onOpenAuth }) {
 
       if (res.ok) {
         await fetchCurrentNode();
+      } else {
+        const d = await res.json().catch(() => ({}));
+        if (d.eventStatus && setEventStatus) setEventStatus(d.eventStatus);
+        setFeedback({
+          type: 'error',
+          message: d.error || d.message || 'Unable to unlock clue at this time.'
+        });
       }
     } catch (e) {
       console.error(e);
+      setFeedback({ type: 'error', message: 'Network connection failed while unlocking clue.' });
     } finally {
       setUnlockingHint(false);
     }
@@ -290,6 +346,49 @@ export default function HuntArena({ onOpenAuth }) {
         </div>
       </div>
 
+      {/* Event Status Alert Banner */}
+      {isPaused && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-amber-500/15 border-2 border-amber-500/60 text-amber-300 font-mono shadow-[0_0_25px_rgba(245,158,11,0.25)] flex items-start sm:items-center justify-between gap-4">
+          <div className="flex items-start sm:items-center space-x-3.5">
+            <div className="p-2 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex-shrink-0">
+              <Pause className="w-5 h-5 animate-pulse" />
+            </div>
+            <div>
+              <div className="font-bold text-sm sm:text-base tracking-wider uppercase text-amber-300 flex items-center space-x-2">
+                <span>[ EVENT STATUS // TEMPORARILY PAUSED ]</span>
+              </div>
+              <div className="text-xs sm:text-sm text-amber-200/90 font-sans mt-0.5 leading-relaxed">
+                The Game Master has paused the hunt. Challenge decryption submissions and progressive clue unlocks are temporarily on hold. Stand by for resumption.
+              </div>
+            </div>
+          </div>
+          <span className="text-[11px] px-3 py-1 rounded-lg bg-amber-500/25 text-amber-300 font-bold border border-amber-500/50 uppercase tracking-widest hidden sm:inline-block flex-shrink-0">
+            PAUSED
+          </span>
+        </div>
+      )}
+
+      {isEnded && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-rose-500/15 border-2 border-rose-500/60 text-rose-300 font-mono shadow-[0_0_25px_rgba(244,63,94,0.25)] flex items-start sm:items-center justify-between gap-4">
+          <div className="flex items-start sm:items-center space-x-3.5">
+            <div className="p-2 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-400 flex-shrink-0">
+              <Square className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="font-bold text-sm sm:text-base tracking-wider uppercase text-rose-300 flex items-center space-x-2">
+                <span>[ EVENT CONCLUDED // STOPPED ]</span>
+              </div>
+              <div className="text-xs sm:text-sm text-rose-200/90 font-sans mt-0.5 leading-relaxed">
+                The LOGIN 2026 Nethunt has officially concluded. Submissions and clue unlocks are closed. View the final alumni rankings in the Standings tab.
+              </div>
+            </div>
+          </div>
+          <span className="text-[11px] px-3 py-1 rounded-lg bg-rose-500/25 text-rose-300 font-bold border border-rose-500/50 uppercase tracking-widest hidden sm:inline-block flex-shrink-0">
+            CONCLUDED
+          </span>
+        </div>
+      )}
+
       {/* Main Dual-Column Cryptic Terminal Workbench */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
@@ -392,9 +491,21 @@ export default function HuntArena({ onOpenAuth }) {
                     type="text"
                     value={answerInput}
                     onChange={(e) => setAnswerInput(e.target.value)}
-                    placeholder="Enter decrypted key, keyword, or number..."
-                    disabled={submitting || cooldownSeconds > 0}
-                    className="w-full pl-11 pr-4 py-4 rounded-xl theme-bg-surface border theme-border theme-text-primary placeholder:theme-text-muted font-mono text-base focus:outline-none focus:border-cyan-400 disabled:opacity-50 transition-all shadow-inner"
+                    placeholder={
+                      isPaused
+                        ? "[ HUNT PAUSED - SUBMISSIONS ON HOLD ]"
+                        : isEnded
+                        ? "[ HUNT CONCLUDED - SUBMISSIONS CLOSED ]"
+                        : "Enter decrypted key, keyword, or number..."
+                    }
+                    disabled={submitting || isPaused || isEnded || cooldownSeconds > 0}
+                    className={`w-full pl-11 pr-4 py-4 rounded-xl theme-bg-surface border font-mono text-base focus:outline-none transition-all shadow-inner ${
+                      isPaused
+                        ? 'border-amber-500/50 bg-amber-500/5 text-amber-200 placeholder:text-amber-400/60 opacity-80 cursor-not-allowed'
+                        : isEnded
+                        ? 'border-rose-500/50 bg-rose-500/5 text-rose-200 placeholder:text-rose-400/60 opacity-80 cursor-not-allowed'
+                        : 'theme-border theme-text-primary placeholder:theme-text-muted focus:border-cyan-400 disabled:opacity-50'
+                    }`}
                     autoComplete="off"
                     spellCheck="false"
                   />
@@ -402,10 +513,20 @@ export default function HuntArena({ onOpenAuth }) {
 
                 <button
                   type="submit"
-                  disabled={submitting || !answerInput.trim() || cooldownSeconds > 0}
-                  className="px-8 py-4 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-mono font-black text-sm uppercase tracking-wider shadow-[0_0_15px_rgba(0,240,255,0.25)] disabled:opacity-50 transition-all flex items-center justify-center space-x-2 flex-shrink-0 cursor-pointer"
+                  disabled={submitting || isPaused || isEnded || !answerInput.trim() || cooldownSeconds > 0}
+                  className={`px-8 py-4 rounded-xl font-mono font-black text-sm uppercase tracking-wider transition-all flex items-center justify-center space-x-2 flex-shrink-0 ${
+                    isPaused
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 cursor-not-allowed opacity-80'
+                      : isEnded
+                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 cursor-not-allowed opacity-80'
+                      : 'bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-[0_0_15px_rgba(0,240,255,0.25)] disabled:opacity-50 cursor-pointer'
+                  }`}
                 >
-                  {submitting ? (
+                  {isPaused ? (
+                    <span>[ PAUSED ]</span>
+                  ) : isEnded ? (
+                    <span>[ CONCLUDED ]</span>
+                  ) : submitting ? (
                     <span>[ VERIFYING... ]</span>
                   ) : cooldownSeconds > 0 ? (
                     <span>[ COOLDOWN {cooldownSeconds}S ]</span>
@@ -420,7 +541,15 @@ export default function HuntArena({ onOpenAuth }) {
 
               <div className="flex flex-wrap items-center justify-between text-xs theme-text-muted font-mono px-1 gap-2">
                 <span>&gt; Case-insensitive & normalized verification</span>
-                <span>&gt; Rate limit: sliding 5 attempts / 60s</span>
+                <span>
+                  {isPaused ? (
+                    <strong className="text-amber-400">&gt; SUBMISSIONS PAUSED BY GAME MASTER</strong>
+                  ) : isEnded ? (
+                    <strong className="text-rose-400">&gt; EVENT CONCLUDED - SUBMISSIONS CLOSED</strong>
+                  ) : (
+                    "&gt; Rate limit: sliding 5 attempts / 60s"
+                  )}
+                </span>
               </div>
             </form>
 
@@ -492,11 +621,21 @@ export default function HuntArena({ onOpenAuth }) {
               <button
                 type="button"
                 onClick={handleUnlockHint}
-                disabled={unlockingHint}
-                className="w-full py-3 rounded-xl border border-cyan-500/50 bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-600 dark:text-cyan-300 font-bold text-xs font-mono transition-all flex items-center justify-center space-x-2 shadow-[0_0_12px_rgba(0,240,255,0.15)]"
+                disabled={unlockingHint || isPaused || isEnded}
+                className={`w-full py-3 rounded-xl border font-bold text-xs font-mono transition-all flex items-center justify-center space-x-2 ${
+                  isPaused
+                    ? 'border-amber-500/40 bg-amber-500/10 text-amber-300/80 cursor-not-allowed'
+                    : isEnded
+                    ? 'border-rose-500/40 bg-rose-500/10 text-rose-300/80 cursor-not-allowed'
+                    : 'border-cyan-500/50 bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-600 dark:text-cyan-300 shadow-[0_0_12px_rgba(0,240,255,0.15)] cursor-pointer'
+                }`}
               >
                 <span>
-                  {unlockingHint 
+                  {isPaused
+                    ? '[ HINT UNLOCKS PAUSED ]'
+                    : isEnded
+                    ? '[ HINT UNLOCKS CLOSED ]'
+                    : unlockingHint 
                     ? '[ DECRYPTING_CLUE... ]' 
                     : `[ UNLOCK STAGE ${(node?.hintsUnlockedCount || 0) + 1} CLUE ]`}
                 </span>

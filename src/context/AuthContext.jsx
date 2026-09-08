@@ -38,14 +38,21 @@ export function AuthProvider({ children }) {
     fetchProfile(token);
   }, [token]);
 
-  // Connect to SSE stream
+  // Fetch initial event status and connect to SSE stream
   useEffect(() => {
+    fetch('/api/events/status')
+      .then(r => r.json())
+      .then(d => {
+        if (d?.status) setEventStatus(d.status);
+      })
+      .catch(() => {});
+
     const eventSource = new EventSource('/api/events/stream');
 
     eventSource.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data);
-        if (data.type === 'EVENT_STATUS_CHANGED') {
+        if (data.type === 'EVENT_STATUS_CHANGED' && data.payload?.status) {
           setEventStatus(data.payload.status);
         }
       } catch (err) {}
@@ -117,7 +124,8 @@ export function AuthProvider({ children }) {
       logout,
       refreshUser,
       updateUser,
-      eventStatus
+      eventStatus,
+      setEventStatus
     }}>
       {children}
     </AuthContext.Provider>

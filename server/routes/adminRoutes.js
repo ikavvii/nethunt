@@ -555,8 +555,9 @@ adminRouter.post('/config', async (req, res) => {
   const setConfig = db.prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)');
 
   if (event_status) {
-    await setConfig.run('event_status', event_status);
-    broadcastEvent('EVENT_STATUS_CHANGED', { status: event_status });
+    const normStatus = (event_status === 'stopped') ? 'ended' : event_status;
+    await setConfig.run('event_status', normStatus);
+    broadcastEvent('EVENT_STATUS_CHANGED', { status: normStatus });
   }
   if (path_length) await setConfig.run('path_length', String(path_length));
   if (event_end_time) await setConfig.run('event_end_time', String(event_end_time));

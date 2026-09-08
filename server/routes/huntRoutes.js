@@ -60,13 +60,16 @@ huntRouter.get('/current-node', requireAuth, async (req, res) => {
   const currentStep = user.current_step || 0;
   const totalSteps = path.length;
 
+  const eventStatus = (await db.prepare("SELECT value FROM config WHERE key = 'event_status'").get())?.value || 'active';
+
   if (currentStep >= totalSteps) {
     return res.json({
       completed: true,
       currentStep,
       totalSteps,
       score: user.score,
-      tabViolations: user.tab_violations || 0
+      tabViolations: user.tab_violations || 0,
+      eventStatus
     });
   }
 
@@ -112,6 +115,7 @@ huntRouter.get('/current-node', requireAuth, async (req, res) => {
     totalSteps,
     score: user.score,
     tabViolations: user.tab_violations || 0,
+    eventStatus,
     node: {
       code: node.node_code,
       title: node.title,
@@ -138,10 +142,16 @@ huntRouter.post('/submit', requireAuth, async (req, res) => {
 
   const eventStatus = (await db.prepare("SELECT value FROM config WHERE key = 'event_status'").get())?.value || 'active';
   if (eventStatus === 'paused') {
-    return res.status(403).json({ error: 'Nethunt is currently paused by organizers.' });
+    return res.status(403).json({ 
+      error: 'Event is currently paused by organizers. Submissions are temporarily on hold.',
+      eventStatus: 'paused'
+    });
   }
-  if (eventStatus === 'ended') {
-    return res.status(403).json({ error: 'LOGIN Nethunt event has concluded.' });
+  if (eventStatus === 'ended' || eventStatus === 'stopped') {
+    return res.status(403).json({ 
+      error: 'LOGIN Nethunt event has concluded. Submissions are closed.',
+      eventStatus: 'ended'
+    });
   }
 
   // Enforce 5 attempts / 60 seconds sliding window
@@ -272,6 +282,21 @@ huntRouter.post('/submit', requireAuth, async (req, res) => {
 // POST Unlock Progressive Hint (Zero leak: Returns only the single newly unlocked hint)
 huntRouter.post('/unlock-hint', requireAuth, async (req, res) => {
   const user = req.user;
+
+  const eventStatus = (await db.prepare("SELECT value FROM config WHERE key = 'event_status'").get())?.value || 'active';
+  if (eventStatus === 'paused') {
+    return res.status(403).json({ 
+      error: 'Event is currently paused by organizers. Hint unlocks are temporarily on hold.',
+      eventStatus: 'paused'
+    });
+  }
+  if (eventStatus === 'ended' || eventStatus === 'stopped') {
+    return res.status(403).json({ 
+      error: 'LOGIN Nethunt event has concluded. Hint unlocks are closed.',
+      eventStatus: 'ended'
+    });
+  }
+
   let path = [];
   try { path = JSON.parse(user.assigned_path_json || '[]'); } catch (e) {}
   const currentStep = user.current_step || 0;

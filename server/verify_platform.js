@@ -453,9 +453,66 @@ async function runRigorousTests() {
     });
     assert(newAdminAttempt.status === 200, 'ADMIN: Login with new custom Game Master passkey succeeds');
 
+    // 16: Verify Event Status Management (Paused / Ended / Active) & Clear Messages
+    console.log('\n--- Verifying Event Status Enforcement & Descriptive Messages ---');
+
+    // 16A: Set event status to 'paused'
+    await fetch(`${BASE}/api/admin/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+      body: JSON.stringify({ event_status: 'paused' })
+    });
+
+    const pausedStatus = await fetch(`${BASE}/api/events/status`).then(r => r.json());
+    assert(pausedStatus.status === 'paused', 'STATUS: /api/events/status reports paused');
+
+    const pausedSubmit = await fetch(`${BASE}/api/hunt/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${loginB.token}` },
+      body: JSON.stringify({ answer: 'any_answer' })
+    });
+    const pausedSubmitData = await pausedSubmit.json();
+    assert(pausedSubmit.status === 403 && pausedSubmitData.error.includes('paused by organizers'), 'STATUS: Submitting during pause returns HTTP 403 with explicit paused message');
+
+    const pausedHint = await fetch(`${BASE}/api/hunt/unlock-hint`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${loginB.token}` }
+    });
+    const pausedHintData = await pausedHint.json();
+    assert(pausedHint.status === 403 && pausedHintData.error.includes('paused by organizers'), 'STATUS: Unlocking hint during pause returns HTTP 403 with explicit paused message');
+
+    // 16B: Set event status to 'ended' / 'stopped'
+    await fetch(`${BASE}/api/admin/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+      body: JSON.stringify({ event_status: 'stopped' })
+    });
+
+    const endedStatus = await fetch(`${BASE}/api/events/status`).then(r => r.json());
+    assert(endedStatus.status === 'ended', 'STATUS: /api/events/status normalized "stopped" to "ended"');
+
+    const endedSubmit = await fetch(`${BASE}/api/hunt/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${loginB.token}` },
+      body: JSON.stringify({ answer: 'any_answer' })
+    });
+    const endedSubmitData = await endedSubmit.json();
+    assert(endedSubmit.status === 403 && endedSubmitData.error.includes('concluded'), 'STATUS: Submitting after event conclusion returns HTTP 403 with explicit concluded message');
+
+    // 16C: Restore event status to 'active'
+    await fetch(`${BASE}/api/admin/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+      body: JSON.stringify({ event_status: 'active' })
+    });
+
+    const activeStatus = await fetch(`${BASE}/api/events/status`).then(r => r.json());
+    assert(activeStatus.status === 'active', 'STATUS: Restored event status to active');
+
     // Clean up: Reset back to default in db for clean state
     await db.prepare("UPDATE config SET value = 'login2026admin' WHERE key = 'admin_key'").run();
     await db.prepare("UPDATE users SET passkey = 'login2026admin' WHERE username = 'admin'").run();
+    await db.prepare("UPDATE config SET value = 'active' WHERE key = 'event_status'").run();
 
     console.log('\n================================================================');
     console.log(`  ALL CRITICAL OBJECTIVES VERIFIED: ${passed} PASSED, ${failed} FAILED`);

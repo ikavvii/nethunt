@@ -1,3 +1,5 @@
+import { db } from './db.js';
+
 // Real-time Event Hub using Server-Sent Events (SSE)
 const clients = new Set();
 
@@ -16,6 +18,15 @@ export function registerSSEClient(req, res) {
 
   // Send initial welcome message
   res.write(`data: ${JSON.stringify({ type: 'CONNECTED', timestamp: Date.now() })}\n\n`);
+
+  // Immediately push current event status on connection
+  Promise.resolve().then(async () => {
+    try {
+      const row = await db.prepare("SELECT value FROM config WHERE key = 'event_status'").get();
+      const status = row?.value || 'active';
+      res.write(`data: ${JSON.stringify({ type: 'EVENT_STATUS_CHANGED', payload: { status }, timestamp: Date.now() })}\n\n`);
+    } catch (e) {}
+  });
 
   req.on('close', () => {
     clearInterval(heartbeat);
