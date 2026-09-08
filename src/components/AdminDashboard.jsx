@@ -776,7 +776,7 @@ export default function AdminDashboard() {
                     type="text"
                     value={editingAlumni.organization || ''}
                     onChange={(e) => setEditingAlumni({ ...editingAlumni, organization: e.target.value })}
-                    placeholder="e.g. 360watts"
+                    placeholder="e.g. Microsoft / Google"
                     className="w-full theme-bg-surface border theme-border rounded-xl p-2.5 theme-text-primary"
                   />
                 </div>
@@ -789,7 +789,7 @@ export default function AdminDashboard() {
                     type="email"
                     value={editingAlumni.email || ''}
                     onChange={(e) => setEditingAlumni({ ...editingAlumni, email: e.target.value })}
-                    placeholder="alumni@email.com"
+                    placeholder="alumni@psgtech.ac.in"
                     className="w-full theme-bg-surface border theme-border rounded-xl p-2.5 theme-text-primary font-mono"
                   />
                 </div>
@@ -799,7 +799,7 @@ export default function AdminDashboard() {
                     type="text"
                     value={editingAlumni.phone || ''}
                     onChange={(e) => setEditingAlumni({ ...editingAlumni, phone: e.target.value })}
-                    placeholder="e.g. 9025505020"
+                    placeholder="e.g. 9876543210"
                     className="w-full theme-bg-surface border theme-border rounded-xl p-2.5 theme-text-primary font-mono"
                   />
                 </div>
@@ -982,7 +982,7 @@ export default function AdminDashboard() {
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Nandhakumar P"
+                    placeholder="e.g. Kavin Kumar S"
                     required
                     className="w-full theme-bg-surface border theme-border rounded-xl p-2.5 theme-text-primary text-xs focus:outline-none focus:border-amber-500 font-medium"
                   />
@@ -1006,7 +1006,7 @@ export default function AdminDashboard() {
                       type="text"
                       value={organization}
                       onChange={(e) => setOrganization(e.target.value)}
-                      placeholder="e.g. 360watts"
+                      placeholder="e.g. Microsoft / Google"
                       className="w-full theme-bg-surface border theme-border rounded-xl p-2.5 theme-text-primary text-xs focus:outline-none focus:border-amber-500"
                     />
                   </div>
@@ -1019,7 +1019,7 @@ export default function AdminDashboard() {
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="nandhakumarpalanisamys@gmail.com"
+                      placeholder="alumni@psgtech.ac.in"
                       className="w-full theme-bg-surface border theme-border rounded-xl p-2.5 theme-text-primary text-xs focus:outline-none focus:border-amber-500 font-mono"
                     />
                   </div>
@@ -1029,7 +1029,7 @@ export default function AdminDashboard() {
                       type="text"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
-                      placeholder="e.g. 9025505020"
+                      placeholder="e.g. 9876543210"
                       className="w-full theme-bg-surface border theme-border rounded-xl p-2.5 theme-text-primary text-xs focus:outline-none focus:border-amber-500 font-mono"
                     />
                   </div>
@@ -1093,10 +1093,10 @@ export default function AdminDashboard() {
                   <button
                     type="button"
                     onClick={() => {
-                      setBulkText("NAME\tEMAIL\tPHONE\tBATCH\tORGANIZATION\nNandhakumar P\tnandhakumarpalanisamys@gmail.com\t9025505020\t19MX\t360watts");
+                      setBulkText("NAME\tEMAIL\tPHONE\tBATCH\tORGANIZATION\nKavin Kumar S\tkavin.s@alumni.psgtech.ac.in\t9876543210\t19MX\tMicrosoft\nPriya R\tpriya.r@alumni.psgtech.ac.in\t9876543211\t20MX\tGoogle");
                     }}
                     className="px-2.5 py-1.5 rounded-lg border theme-border theme-text-secondary hover:theme-text-primary hover:theme-bg-surface font-mono text-[10px] whitespace-nowrap cursor-pointer"
-                    title="Load Nandhakumar P sample registration row"
+                    title="Load sample alumni registration rows"
                   >
                     LOAD SAMPLE DATA
                   </button>
@@ -1116,7 +1116,7 @@ export default function AdminDashboard() {
                     rows={6}
                     value={bulkText}
                     onChange={(e) => setBulkText(e.target.value)}
-                    placeholder={`NAME\tEMAIL\tPHONE\tBATCH\tORGANIZATION\nNandhakumar P\tnandhakumarpalanisamys@gmail.com\t9025505020\t19MX\t360watts`}
+                    placeholder={`NAME\tEMAIL\tPHONE\tBATCH\tORGANIZATION\nKavin Kumar S\tkavin.s@alumni.psgtech.ac.in\t9876543210\t19MX\tMicrosoft\nPriya R\tpriya.r@alumni.psgtech.ac.in\t9876543211\t20MX\tGoogle`}
                     className="w-full theme-bg-surface border theme-border rounded-xl p-3 font-mono text-xs theme-text-primary focus:outline-none focus:border-amber-500 leading-relaxed select-all"
                   />
 

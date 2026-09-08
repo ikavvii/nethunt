@@ -288,11 +288,11 @@ async function runRigorousTests() {
     
     // 12A: Enroll test alumnus with Mobile and Organization
     const passkeyAlumData = {
-      name: 'Nandhakumar P',
-      email: 'nandhakumar.verify@gmail.com',
-      phone: '9025505020',
+      name: 'Test Alumnus S',
+      email: 'test.alumnus@psgtech.ac.in',
+      phone: '9876543200',
       batch: '19MX',
-      organization: '360watts'
+      organization: 'Example Corp'
     };
     db.prepare("DELETE FROM users WHERE email = ? OR phone = ?").run(passkeyAlumData.email, passkeyAlumData.phone);
     
@@ -307,15 +307,15 @@ async function runRigorousTests() {
     const phoneLogin = await fetch(`${BASE}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: '9025505020', passkey: '9025505020' })
+      body: JSON.stringify({ username: '9876543200', passkey: '9876543200' })
     }).then(r => r.json());
-    assert(phoneLogin.token && phoneLogin.user.name === 'Nandhakumar P', 'PASSKEY: Successful login using Phone as Username and Phone as Passkey');
+    assert(phoneLogin.token && phoneLogin.user.name === 'Test Alumnus S', 'PASSKEY: Successful login using Phone as Username and Phone as Passkey');
 
     // 12C: Login using Email as Identifier and Phone as Default Passkey
     const emailLogin = await fetch(`${BASE}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'nandhakumar.verify@gmail.com', passkey: '9025505020' })
+      body: JSON.stringify({ username: 'test.alumnus@psgtech.ac.in', passkey: '9876543200' })
     }).then(r => r.json());
     assert(emailLogin.token, 'PASSKEY: Successful login using Email as Username and Phone as Passkey');
 
@@ -331,16 +331,16 @@ async function runRigorousTests() {
     const recoverRes = await fetch(`${BASE}/api/auth/recover-passkey`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'nandhakumar.verify@gmail.com', phone: '9025505020' })
+      body: JSON.stringify({ email: 'test.alumnus@psgtech.ac.in', phone: '9876543200' })
     }).then(r => r.json());
-    assert(recoverRes.success && recoverRes.passkey === '9025505020', 'PASSKEY: Self-service recovery resets passkey to phone number');
+    assert(recoverRes.success && recoverRes.passkey === '9876543200', 'PASSKEY: Self-service recovery resets passkey to phone number');
 
     // 12F: Admin 1-click Reset Passkey
     const adminResetPasskey = await fetch(`${BASE}/api/admin/alumni/${enrollAlum.user.id}/reset-passkey`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${adminToken}` }
     }).then(r => r.json());
-    assert(adminResetPasskey.success && adminResetPasskey.passkey === '9025505020', 'PASSKEY: Admin 1-click reset passkey to phone number executed');
+    assert(adminResetPasskey.success && adminResetPasskey.passkey === '9876543200', 'PASSKEY: Admin 1-click reset passkey to phone number executed');
 
     // 13. Verify Duplicate Alumnus Prevention & Hardening
     console.log('\n--- Verifying Duplicate Alumnus Prevention & Hardening ---');
@@ -350,9 +350,9 @@ async function runRigorousTests() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
       body: JSON.stringify({
-        name: 'Clone Nandhakumar',
-        email: 'clone.nandha@gmail.com',
-        phone: '9025505020',
+        name: 'Clone Alumnus',
+        email: 'clone.alumnus@psgtech.ac.in',
+        phone: '9876543200',
         batch: '19MX'
       })
     });
@@ -364,8 +364,8 @@ async function runRigorousTests() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
       body: JSON.stringify({
-        name: 'Clone Nandhakumar 2',
-        email: 'NANDHAKUMAR.VERIFY@GMAIL.COM',
+        name: 'Clone Alumnus 2',
+        email: 'TEST.ALUMNUS@PSGTECH.AC.IN',
         phone: '9876543210',
         batch: '19MX'
       })
@@ -378,7 +378,7 @@ async function runRigorousTests() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
       body: JSON.stringify({
-        rawText: `NAME\tEMAIL\tPHONE\tBATCH\tORGANIZATION\nNandhakumar P\tnandhakumar.verify@gmail.com\t9025505020\t19MX\t360watts\nBrand New Alum\tbrandnew@psg.edu\t9111222333\t20MX\tGoogle`
+        rawText: `NAME\tEMAIL\tPHONE\tBATCH\tORGANIZATION\nTest Alumnus S\ttest.alumnus@psgtech.ac.in\t9876543200\t19MX\tExample Corp\nBrand New Alum\tbrandnew@psg.edu\t9111222333\t20MX\tGoogle`
       })
     }).then(r => r.json());
     assert(bulkDupRes.success && bulkDupRes.skipped >= 1 && bulkDupRes.duplicatesSkipped?.length >= 1, 'DUPLICATE GUARD: Bulk importer blocked existing alumnus duplicate from creating second row');
@@ -390,7 +390,7 @@ async function runRigorousTests() {
     const initialLogin = await fetch(`${BASE}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'nandhakumar.verify@gmail.com', passkey: '9025505020' })
+      body: JSON.stringify({ username: 'test.alumnus@psgtech.ac.in', passkey: '9876543200' })
     }).then(r => r.json());
     assert(initialLogin.mustChangePassword === true && initialLogin.user.password_changed === 0, 'AUTH: Initial login flags mustChangePassword = true');
 
@@ -412,7 +412,7 @@ async function runRigorousTests() {
     const updatedLogin = await fetch(`${BASE}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'nandhakumar.verify@gmail.com', passkey: 'secureAlumPassword2026' })
+      body: JSON.stringify({ username: 'test.alumnus@psgtech.ac.in', passkey: 'secureAlumPassword2026' })
     }).then(r => r.json());
     assert(updatedLogin.token && updatedLogin.mustChangePassword === false, 'AUTH: Login with newly changed personal password succeeds without prompt');
 
@@ -420,9 +420,12 @@ async function runRigorousTests() {
     const oldPassLogin = await fetch(`${BASE}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'nandhakumar.verify@gmail.com', passkey: '9025505020' })
+      body: JSON.stringify({ username: 'test.alumnus@psgtech.ac.in', passkey: '9876543200' })
     });
     assert(oldPassLogin.status === 401, 'AUTH: Old default phone password rejected after password change');
+
+    // Clean up test alumnus from database so no scratch users remain
+    db.prepare("DELETE FROM users WHERE email = ? OR phone = ?").run(passkeyAlumData.email, passkeyAlumData.phone);
 
     // 15: Game Master Admin Key Rotation & Revocation of login2026admin
     console.log('\n--- Verifying Admin Key Rotation & Revocation of login2026admin ---');

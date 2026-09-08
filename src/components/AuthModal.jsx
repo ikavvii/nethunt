@@ -173,7 +173,7 @@ export default function AuthModal({ isOpen, onClose }) {
                 type="email"
                 value={recoverEmail}
                 onChange={(e) => setRecoverEmail(e.target.value)}
-                placeholder="e.g. nandhakumar@gmail.com"
+                placeholder="e.g. alumni@psgtech.ac.in"
                 required
                 className="w-full theme-bg-surface border theme-border rounded-xl p-3.5 theme-text-primary text-sm focus:outline-none focus:border-cyan-400 font-mono shadow-inner transition-colors"
                 autoFocus
@@ -188,7 +188,7 @@ export default function AuthModal({ isOpen, onClose }) {
                 type="text"
                 value={recoverPhone}
                 onChange={(e) => setRecoverPhone(e.target.value)}
-                placeholder="e.g. 9025505020"
+                placeholder="e.g. 9876543210"
                 required
                 className="w-full theme-bg-surface border theme-border rounded-xl p-3.5 theme-text-primary text-sm focus:outline-none focus:border-cyan-400 font-mono shadow-inner transition-colors"
               />
@@ -223,7 +223,7 @@ export default function AuthModal({ isOpen, onClose }) {
                     type="text"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    placeholder="e.g. nandhakumar@gmail.com or 9025505020"
+                    placeholder="e.g. alumni@psgtech.ac.in or 9876543210"
                     required
                     className="w-full theme-bg-surface border theme-border rounded-xl p-3.5 theme-text-primary text-sm sm:text-base focus:outline-none focus:border-cyan-400 font-mono shadow-inner transition-colors"
                     autoFocus
@@ -247,7 +247,7 @@ export default function AuthModal({ isOpen, onClose }) {
                     type="password"
                     value={passkey}
                     onChange={(e) => setPasskey(e.target.value)}
-                    placeholder="e.g. 9025505020 or your password"
+                    placeholder="e.g. 9876543210 or your password"
                     required
                     className="w-full theme-bg-surface border theme-border rounded-xl p-3.5 theme-text-primary text-sm sm:text-base focus:outline-none focus:border-cyan-400 font-mono shadow-inner transition-colors"
                   />
