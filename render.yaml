@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: psg-mca-nethunt
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: pnpm install && pnpm run build
+    startCommand: node server/index.js
+    envVars:
+      - key: NODE_VERSION
+        value: 22.12.0
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ADMIN_PASSKEY
+        value: psg_mca_admin_2026_passkey
+
