@@ -62,4 +62,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD node -e "fetch('http://localhost:3001/api/health').then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))"
 
 # Start the unified backend server
-CMD ["node", "server/index.js"]
+CMD ["node", "--experimental-sqlite", "server/index.js"]

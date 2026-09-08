@@ -5,10 +5,12 @@ services:
     plan: free
     region: singapore
     buildCommand: pnpm install && pnpm run build
-    startCommand: node server/index.js
+    startCommand: node --experimental-sqlite server/index.js
     envVars:
       - key: NODE_VERSION
         value: 22.12.0
+      - key: NODE_OPTIONS
+        value: --experimental-sqlite
       - key: NODE_ENV
         value: production
       - key: PORT
