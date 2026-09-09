@@ -46,6 +46,7 @@ function MainLayout() {
           {activeTab === 'hunt' && user?.role !== 'admin' && (
             <HuntArena 
               onOpenAuth={() => setAuthModalOpen(true)}
+              onNavigateToLeaderboard={() => setActiveTab('standings')}
             />
           )}
           {activeTab === 'standings' && (

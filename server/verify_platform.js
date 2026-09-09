@@ -190,6 +190,16 @@ async function runRigorousTests() {
     // 6. Verify Anti-Collusion Trajectories
     assert(nodeA.node.code !== nodeB.node.code, `ANTI-COLLUSION: Alumni A starts on ${nodeA.node.code}, Alumni B starts on ${nodeB.node.code}`);
 
+    // Start test session for both participants so they can proceed with gameplay
+    await fetch(`${BASE}/api/hunt/start-test`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${loginA.token}` }
+    });
+    await fetch(`${BASE}/api/hunt/start-test`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${loginB.token}` }
+    });
+
     // 7. Test Progressive 7-Stage Decaying Hints
     console.log('\n--- Testing Progressive 7-Stage Hint Point Decay ---');
     const h1 = await fetch(`${BASE}/api/hunt/unlock-hint`, {
@@ -682,6 +692,160 @@ async function runRigorousTests() {
       }
     });
     assert(adminMobileCurrentNode.status !== 403, 'DEVICE INTEGRITY: Game Master admin exempt from mobile device block');
+
+    console.log('\n--- Section 20: Verifying 104 Puzzles Pool & Timed Test Session System ---');
+    // 20A: Verify 104 puzzles populated in DB with Login'26 Puzzles-add (NODE_ADD_01 to NODE_ADD_44)
+    const nodeCountRow = await db.prepare('SELECT COUNT(*) as count FROM nodes').get();
+    assert(nodeCountRow.count === 104, `PUZZLE REPOSITORY: Total nodes in DB is 104 (Found: ${nodeCountRow.count})`);
+
+    const add01 = await db.prepare("SELECT * FROM nodes WHERE node_code = 'NODE_ADD_01'").get();
+    assert(add01 && add01.answer === '158', 'PUZZLE VERIFICATION: NODE_ADD_01 (The Doubling Step Series) answer is 158');
+
+    const add44 = await db.prepare("SELECT * FROM nodes WHERE node_code = 'NODE_ADD_44'").get();
+    assert(add44 && add44.answer === '66', 'PUZZLE VERIFICATION: NODE_ADD_44 (Handshake Combinatorics) answer is 66');
+
+    const rebusNode = await db.prepare("SELECT * FROM nodes WHERE node_code = 'NODE_ADD_22'").get();
+    assert(rebusNode && rebusNode.media_url === '/puzzles/puzzle_img_2.png', 'PUZZLE VERIFICATION: NODE_ADD_22 has image asset linked');
+
+    // 20B: Enroll dedicated participant to verify timer lifecycle
+    const timerUserPayload = { name: 'Timed Session Tester', batch: '2024', username: `timer_user_${runId}`, passkey: 'timerpass123' };
+    await fetch(`${BASE}/api/admin/alumni`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+      body: JSON.stringify(timerUserPayload)
+    });
+
+    const loginTimer = await fetch(`${BASE}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: timerUserPayload.username, passkey: timerUserPayload.passkey })
+    }).then(r => r.json());
+
+    // Pre-test state: Verify user has not started test yet
+    const preTestNodeRes = await fetch(`${BASE}/api/hunt/current-node`, {
+      headers: { 'Authorization': `Bearer ${loginTimer.token}` }
+    }).then(r => r.json());
+    assert(preTestNodeRes.testStarted === false, 'TIMED SESSION: Participant testStarted is false before briefing initiation');
+    assert(preTestNodeRes.totalDurationMinutes === 120, 'TIMED SESSION: Default total duration is 120 minutes');
+    assert(preTestNodeRes.timeRemainingSeconds === 7200, 'TIMED SESSION: Time remaining is 7200s (120 mins)');
+    assert(preTestNodeRes.isTimeExpired === false, 'TIMED SESSION: isTimeExpired is false');
+
+    // 20C: Submissions and hints are blocked before test is started
+    const prematureSubmit = await fetch(`${BASE}/api/hunt/submit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${loginTimer.token}`
+      },
+      body: JSON.stringify({ answer: 'test' })
+    });
+    assert(prematureSubmit.status === 403, 'TIMED SESSION: Submission blocked with HTTP 403 if test not initiated');
+    const prematureSubmitJson = await prematureSubmit.json();
+    assert(prematureSubmitJson.testNotStarted === true, 'TIMED SESSION: Response flags testNotStarted = true');
+
+    const prematureHint = await fetch(`${BASE}/api/hunt/unlock-hint`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${loginTimer.token}`
+      },
+      body: JSON.stringify({ hint_index: 0 })
+    });
+    assert(prematureHint.status === 403, 'TIMED SESSION: Hint unlock blocked with HTTP 403 if test not initiated');
+
+    // 20D: Start test session via /api/hunt/start-test
+    const startTestRes = await fetch(`${BASE}/api/hunt/start-test`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${loginTimer.token}` }
+    }).then(r => r.json());
+    assert(startTestRes.success === true, 'TIMED SESSION: /api/hunt/start-test initiates test successfully');
+    assert(startTestRes.testStartedAt, 'TIMED SESSION: start-test returns testStartedAt timestamp');
+    assert(startTestRes.totalDurationMinutes === 120, 'TIMED SESSION: start-test reports 120 minutes total duration');
+
+    // Verify TEST_STARTED logged in proctor audit
+    const startLog = await db.prepare("SELECT * FROM proctor_logs WHERE event_type = 'TEST_STARTED' AND user_id = ?").get(loginTimer.user.id);
+    assert(startLog !== undefined, 'TIMED SESSION: TEST_STARTED logged to proctor audit trail');
+
+    // 20E: After starting, current-node reflects active countdown
+    const activeTestNodeRes = await fetch(`${BASE}/api/hunt/current-node`, {
+      headers: { 'Authorization': `Bearer ${loginTimer.token}` }
+    }).then(r => r.json());
+    assert(activeTestNodeRes.testStarted === true, 'TIMED SESSION: Participant testStarted is now true');
+    assert(activeTestNodeRes.timeRemainingSeconds <= 7200 && activeTestNodeRes.timeRemainingSeconds > 7100, 'TIMED SESSION: Time remaining active countdown between 7100s and 7200s');
+
+    // 20F: Admin grants extra time (+15m)
+    const grantTimeRes = await fetch(`${BASE}/api/admin/alumni/${loginTimer.user.id}/timer`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({ action: 'grant_extra_time', extraMinutes: 15 })
+    }).then(r => r.json());
+    assert(grantTimeRes.success === true && grantTimeRes.extra_time_minutes === 15, 'ADMIN TIMER: Admin granted +15 minutes extra time');
+
+    const extendedNodeRes = await fetch(`${BASE}/api/hunt/current-node`, {
+      headers: { 'Authorization': `Bearer ${loginTimer.token}` }
+    }).then(r => r.json());
+    assert(extendedNodeRes.totalDurationMinutes === 135, 'TIMED SESSION: Total duration updated to 135 minutes after +15m grant');
+    assert(extendedNodeRes.timeRemainingSeconds > 7200, 'TIMED SESSION: Time remaining increased with extra 15m');
+
+    // 20G: Simulate timer expiration on test participant
+    // Set test_started_at to 3 hours ago (180 mins ago)
+    const threeHoursAgo = Date.now() - (180 * 60 * 1000);
+    await db.prepare('UPDATE users SET test_started_at = ?, extra_time_minutes = 0 WHERE id = ?').run(threeHoursAgo, loginTimer.user.id);
+
+    const expiredNodeRes = await fetch(`${BASE}/api/hunt/current-node`, {
+      headers: { 'Authorization': `Bearer ${loginTimer.token}` }
+    }).then(r => r.json());
+    assert(expiredNodeRes.isTimeExpired === true, 'TIMED SESSION: User marked isTimeExpired = true after elapsed time exceeds duration');
+    assert(expiredNodeRes.timeRemainingSeconds === 0, 'TIMED SESSION: User timeRemainingSeconds is 0');
+
+    // Submissions strictly blocked on expired session
+    const expiredSubmit = await fetch(`${BASE}/api/hunt/submit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${loginTimer.token}`
+      },
+      body: JSON.stringify({ answer: 'test' })
+    });
+    assert(expiredSubmit.status === 403, 'TIMED SESSION: Expired user submission blocked with HTTP 403');
+    const expiredSubmitJson = await expiredSubmit.json();
+    assert(expiredSubmitJson.timeExpired === true, 'TIMED SESSION: Response flags timeExpired = true');
+
+    // 20H: Admin resets timer for User
+    const resetTimerRes = await fetch(`${BASE}/api/admin/alumni/${loginTimer.user.id}/timer`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({ action: 'reset_timer' })
+    }).then(r => r.json());
+    assert(resetTimerRes.success === true, 'ADMIN TIMER: Admin successfully reset timer for participant');
+
+    const postResetNodeRes = await fetch(`${BASE}/api/hunt/current-node`, {
+      headers: { 'Authorization': `Bearer ${loginTimer.token}` }
+    }).then(r => r.json());
+    assert(postResetNodeRes.testStarted === false, 'TIMED SESSION: Participant testStarted is false again after admin reset');
+
+    // 20I: Admin configures global test duration to 90 minutes
+    const configTimerRes = await fetch(`${BASE}/api/admin/config`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({ test_duration_minutes: 90 })
+    }).then(r => r.json());
+    assert(configTimerRes.success === true, 'ADMIN CONFIG: Admin set test_duration_minutes to 90');
+
+    const dbConfigDuration = await db.prepare("SELECT value FROM config WHERE key = 'test_duration_minutes'").get();
+    assert(dbConfigDuration.value === '90', 'ADMIN CONFIG: Database config persists test_duration_minutes = 90');
+
+    // Reset back to 120 for normal operation
+    await db.prepare("UPDATE config SET value = '120' WHERE key = 'test_duration_minutes'").run();
 
     // Clean up: Reset back to default in db for clean state
     await db.prepare("UPDATE config SET value = 'login2026admin' WHERE key = 'admin_key'").run();

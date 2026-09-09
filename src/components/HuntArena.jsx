@@ -26,8 +26,10 @@ import {
 import { useProctorGuard } from '../utils/useProctorGuard';
 import { useDeviceGuard } from '../utils/deviceGuard';
 import DeviceBlockedScreen from './DeviceBlockedScreen';
+import TestStartBriefing from './TestStartBriefing';
+import TestExpiredScreen from './TestExpiredScreen';
 
-export default function HuntArena({ onOpenAuth }) {
+export default function HuntArena({ onOpenAuth, onNavigateToLeaderboard }) {
   const { user, token, refreshUser, eventStatus: authEventStatus, setEventStatus } = useAuth();
 
   const [currentNodeData, setCurrentNodeData] = useState(null);
@@ -38,6 +40,10 @@ export default function HuntArena({ onOpenAuth }) {
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const [unlockingHint, setUnlockingHint] = useState(false);
   const [copiedPayload, setCopiedPayload] = useState(false);
+
+  // Timed Test Session State
+  const [startingTest, setStartingTest] = useState(false);
+  const [timeRemaining, setTimeRemaining] = useState(null);
 
   // Proctoring & Fullscreen State
   const [adminFullscreenBypass, setAdminFullscreenBypass] = useState(false);
@@ -92,6 +98,76 @@ export default function HuntArena({ onOpenAuth }) {
       setProctorViolations(user.tab_violations);
     }
   }, [currentNodeData?.tabViolations, user?.tab_violations]);
+
+  // Sync real-time countdown timer from server
+  useEffect(() => {
+    if (currentNodeData?.timeRemainingSeconds !== undefined) {
+      setTimeRemaining(currentNodeData.timeRemainingSeconds);
+    }
+  }, [currentNodeData?.timeRemainingSeconds]);
+
+  // Local 1-second countdown tick
+  useEffect(() => {
+    if (timeRemaining === null || timeRemaining === undefined) return;
+    if (timeRemaining <= 0) {
+      if (currentNodeData?.testStarted && !currentNodeData?.isTimeExpired) {
+        fetchCurrentNode();
+      }
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setTimeRemaining(prev => {
+        if (prev <= 1) {
+          fetchCurrentNode();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [timeRemaining, currentNodeData?.testStarted, currentNodeData?.isTimeExpired]);
+
+  const formatTime = (secs) => {
+    if (secs === null || secs === undefined) return '--:--:--';
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = secs % 60;
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${pad(h)}:${pad(m)}:${pad(s)}`;
+  };
+
+  const handleStartTest = async () => {
+    if (startingTest) return;
+    setStartingTest(true);
+    try {
+      const res = await fetch('/api/hunt/start-test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await fetchCurrentNode();
+      } else {
+        setFeedback({
+          type: 'error',
+          message: data.error || 'Failed to start test session. Please retry.'
+        });
+      }
+    } catch (err) {
+      console.error(err);
+      setFeedback({
+        type: 'error',
+        message: 'Network error while initializing test session.'
+      });
+    } finally {
+      setStartingTest(false);
+    }
+  };
 
   const handleViolation = (eventType, metadata, totalViolations) => {
     if (totalViolations !== undefined) {
@@ -336,6 +412,29 @@ export default function HuntArena({ onOpenAuth }) {
     );
   }
 
+  // Pre-test Briefing Gate: Participant must review rules & initialize timed session
+  if (user && user.role !== 'admin' && !currentNodeData?.testStarted) {
+    return (
+      <TestStartBriefing 
+        user={user}
+        durationMinutes={currentNodeData?.totalDurationMinutes || 120}
+        onStartTest={handleStartTest}
+        loading={startingTest}
+      />
+    );
+  }
+
+  // Timed Session Expired Gate: All submissions locked
+  if (user && user.role !== 'admin' && currentNodeData?.isTimeExpired) {
+    return (
+      <TestExpiredScreen 
+        user={user}
+        currentNodeData={currentNodeData}
+        onNavigateToLeaderboard={onNavigateToLeaderboard}
+      />
+    );
+  }
+
   // Trajectory Completed Screen
   if (currentNodeData?.completed) {
     return (
@@ -536,6 +635,71 @@ export default function HuntArena({ onOpenAuth }) {
         </div>
       </div>
 
+      {/* Real-time Session Countdown Timer Header */}
+      {timeRemaining !== null && timeRemaining !== undefined && (
+        <div className={`p-4 sm:p-5 rounded-2xl border font-mono shadow-md flex flex-wrap items-center justify-between gap-4 transition-all ${
+          timeRemaining <= 600
+            ? 'bg-rose-950/80 border-rose-500 text-rose-200 shadow-[0_0_30px_rgba(244,63,94,0.35)] animate-pulse'
+            : timeRemaining <= 1800
+              ? 'bg-amber-950/50 border-amber-500/60 text-amber-200 shadow-[0_0_20px_rgba(245,158,11,0.2)]'
+              : 'theme-bg-card border-cyan-500/30 text-cyan-300'
+        }`}>
+          <div className="flex items-center space-x-3.5">
+            <div className={`p-2.5 rounded-xl flex items-center justify-center ${
+              timeRemaining <= 600
+                ? 'bg-rose-500/20 text-rose-400'
+                : timeRemaining <= 1800
+                  ? 'bg-amber-500/20 text-amber-400'
+                  : 'bg-cyan-500/15 text-cyan-400'
+            }`}>
+              <Clock className={`w-6 h-6 ${timeRemaining <= 600 ? 'animate-spin' : ''}`} />
+            </div>
+            <div>
+              <div className="text-xs uppercase tracking-wider text-slate-400 flex items-center space-x-2">
+                <span>SESSION COUNTDOWN TIMER</span>
+                {timeRemaining <= 600 && (
+                  <span className="px-2 py-0.5 rounded text-[10px] bg-rose-500 text-white font-bold animate-bounce">
+                    FINAL 10 MINS
+                  </span>
+                )}
+                {timeRemaining <= 1800 && timeRemaining > 600 && (
+                  <span className="px-2 py-0.5 rounded text-[10px] bg-amber-500 text-slate-950 font-bold">
+                    &lt; 30 MINS
+                  </span>
+                )}
+              </div>
+              <div className="text-2xl sm:text-3xl font-black tabular-nums tracking-wider text-white mt-0.5">
+                {formatTime(timeRemaining)}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-4">
+            <div className="text-right hidden sm:block">
+              <span className="text-xs text-slate-400 block">TOTAL ALLOCATED</span>
+              <span className="text-sm font-bold text-slate-200">
+                {currentNodeData?.totalDurationMinutes || 120} MINUTES
+              </span>
+            </div>
+            {/* Visual countdown progress bar */}
+            <div className="w-32 sm:w-48 bg-slate-800 rounded-full h-3.5 overflow-hidden border border-slate-700">
+              <div 
+                className={`h-full transition-all duration-1000 ${
+                  timeRemaining <= 600
+                    ? 'bg-rose-500'
+                    : timeRemaining <= 1800
+                      ? 'bg-amber-500'
+                      : 'bg-cyan-400'
+                }`}
+                style={{ 
+                  width: `${Math.max(0, Math.min(100, (timeRemaining / ((currentNodeData?.totalDurationMinutes || 120) * 60)) * 100))}%` 
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Trajectory Step Progress Visualizer - Single-Line Formal Design */}
       <div className="theme-bg-card border theme-border p-5 rounded-2xl shadow-sm">
         <div className="flex flex-wrap items-center justify-between text-sm font-mono mb-3 gap-2">
@@ -678,6 +842,20 @@ export default function HuntArena({ onOpenAuth }) {
               <div className="text-base sm:text-lg theme-text-primary font-normal leading-relaxed whitespace-pre-line">
                 {node?.clue_text}
               </div>
+
+              {/* Visual Image Clue if media_url provided */}
+              {node?.media_url && (
+                <div className="rounded-2xl border-2 border-cyan-500/40 overflow-hidden shadow-2xl bg-slate-950 p-4 text-center my-4">
+                  <img 
+                    src={node.media_url} 
+                    alt={node.title || "Cryptic visual cipher"} 
+                    className="max-h-[420px] max-w-full mx-auto object-contain rounded-xl shadow-lg transition-transform hover:scale-[1.01]"
+                  />
+                  <span className="block mt-2 text-xs font-mono text-cyan-400/80">
+                    &gt; VISUAL CIPHER // EXAMINE REBUS DETAILS CAREFULLY
+                  </span>
+                </div>
+              )}
 
               {/* Code Payload Box */}
               {node?.clue_payload && (

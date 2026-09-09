@@ -4,6 +4,7 @@ dotenv.config();
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
+import { additionalMasterNodes } from './additionalNodes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -135,6 +136,10 @@ export async function initDatabase() {
       tab_violations INTEGER DEFAULT 0,
       is_disqualified INTEGER DEFAULT 0,
       last_solved_subms REAL DEFAULT 0,
+      test_started_at INTEGER DEFAULT NULL,
+      test_duration_minutes INTEGER DEFAULT NULL,
+      extra_time_minutes INTEGER DEFAULT 0,
+      test_submitted_at INTEGER DEFAULT NULL,
       created_at INTEGER NOT NULL
     );
   `);
@@ -149,6 +154,10 @@ export async function initDatabase() {
     if (!userColumns.includes('last_face_photo')) await db.exec("ALTER TABLE users ADD COLUMN last_face_photo TEXT;");
     if (!userColumns.includes('last_face_at')) await db.exec("ALTER TABLE users ADD COLUMN last_face_at INTEGER;");
     if (!userColumns.includes('password_changed')) await db.exec("ALTER TABLE users ADD COLUMN password_changed INTEGER DEFAULT 0;");
+    if (!userColumns.includes('test_started_at')) await db.exec("ALTER TABLE users ADD COLUMN test_started_at INTEGER;");
+    if (!userColumns.includes('test_duration_minutes')) await db.exec("ALTER TABLE users ADD COLUMN test_duration_minutes INTEGER;");
+    if (!userColumns.includes('extra_time_minutes')) await db.exec("ALTER TABLE users ADD COLUMN extra_time_minutes INTEGER DEFAULT 0;");
+    if (!userColumns.includes('test_submitted_at')) await db.exec("ALTER TABLE users ADD COLUMN test_submitted_at INTEGER;");
   } catch (e) {
     console.error('Migration warning (users table):', e.message);
   }
@@ -285,6 +294,9 @@ async function seedSystem() {
   const lbVisible = await getConfig.get('leaderboard_visible');
   if (!lbVisible) await setConfig.run('leaderboard_visible', 'true');
 
+  const testDur = await getConfig.get('test_duration_minutes');
+  if (!testDur) await setConfig.run('test_duration_minutes', '120');
+
   // Admin user
   const adminUser = await db.prepare("SELECT id FROM users WHERE username = 'admin'").get();
   if (!adminUser) {
@@ -294,12 +306,14 @@ async function seedSystem() {
     `).run(Date.now());
   }
 
-  // Populate master pool of 60 deep analytical, lateral, verbal, and sleuth challenges
+  // Populate master pool of 104 deep analytical, lateral, verbal, and sleuth challenges
   const countRow = await db.prepare('SELECT COUNT(*) as count FROM nodes').get();
   const count = countRow ? Number(countRow.count) : 0;
   const hasNt28 = await db.prepare("SELECT id FROM nodes WHERE node_code = 'NODE_NT_28'").get();
+  const hasAdd44 = await db.prepare("SELECT id FROM nodes WHERE node_code = 'NODE_ADD_44'").get();
+  const hasMedia = await db.prepare("SELECT id FROM nodes WHERE node_code = 'NODE_ADD_22' AND media_url IS NOT NULL").get();
   const fd2 = await db.prepare("SELECT clue_text FROM nodes WHERE node_code = 'NODE_FD_02'").get();
-  if (count < 60 || !hasNt28 || !fd2?.clue_text?.includes('(2,4), (2,2)')) {
+  if (count < 104 || !hasNt28 || !hasAdd44 || !hasMedia || !fd2?.clue_text?.includes('(2,4), (2,2)')) {
     await db.exec('DELETE FROM nodes');
     await populateAnalyticalMasterNodes();
   }
@@ -461,8 +475,8 @@ export function calculateNodePoints(basePoints, hintsUnlocked) {
 async function populateAnalyticalMasterNodes() {
   const insert = db.prepare(`
     INSERT INTO nodes (
-      node_code, title, tier, domain, story, clue_text, clue_payload, media_type, answer, aliases_json, near_misses_json, hints_json, base_points
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      node_code, title, tier, domain, story, clue_text, clue_payload, media_type, media_url, answer, aliases_json, near_misses_json, hints_json, base_points
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const masterNodes = [
@@ -1783,11 +1797,13 @@ async function populateAnalyticalMasterNodes() {
     }
   ];
 
+  masterNodes.push(...additionalMasterNodes);
+
   if (db.isTurso && db.tursoClient) {
     const batchStatements = masterNodes.map(n => ({
       sql: `INSERT INTO nodes (
-        node_code, title, tier, domain, story, clue_text, clue_payload, media_type, answer, aliases_json, near_misses_json, hints_json, base_points
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        node_code, title, tier, domain, story, clue_text, clue_payload, media_type, media_url, answer, aliases_json, near_misses_json, hints_json, base_points
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         n.code,
         n.title,
@@ -1797,6 +1813,7 @@ async function populateAnalyticalMasterNodes() {
         n.clue_text,
         n.payload || '',
         n.media_type || 'text',
+        n.media_url || null,
         n.answer,
         JSON.stringify(n.aliases || []),
         JSON.stringify(n.near_misses || {}),
@@ -1816,6 +1833,7 @@ async function populateAnalyticalMasterNodes() {
         n.clue_text,
         n.payload || '',
         n.media_type || 'text',
+        n.media_url || null,
         n.answer,
         JSON.stringify(n.aliases || []),
         JSON.stringify(n.near_misses || {}),

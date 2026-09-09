@@ -72,6 +72,98 @@ async function checkAndEnforceDesktopDevice(req, res, user) {
   return true;
 }
 
+export async function getSessionTimerState(user) {
+  if (user.role === 'admin') {
+    return {
+      testStarted: true,
+      testStartedAt: user.test_started_at || Date.now(),
+      totalDurationMinutes: 120,
+      timeRemainingSeconds: 7200,
+      isTimeExpired: false
+    };
+  }
+
+  const globalDurationConfig = (await db.prepare("SELECT value FROM config WHERE key = 'test_duration_minutes'").get())?.value;
+  const globalDuration = parseInt(globalDurationConfig || '120', 10);
+  const userDuration = user.test_duration_minutes ? Number(user.test_duration_minutes) : globalDuration;
+  const extraMinutes = Number(user.extra_time_minutes || 0);
+  const totalDurationMinutes = userDuration + extraMinutes;
+
+  if (!user.test_started_at) {
+    return {
+      testStarted: false,
+      testStartedAt: null,
+      totalDurationMinutes,
+      timeRemainingSeconds: totalDurationMinutes * 60,
+      isTimeExpired: false
+    };
+  }
+
+  const now = Date.now();
+  const startedMs = !isNaN(Number(user.test_started_at))
+    ? Number(user.test_started_at)
+    : new Date(user.test_started_at).getTime();
+  const elapsedMs = now - startedMs;
+  const totalAllowedMs = totalDurationMinutes * 60 * 1000;
+  const remainingMs = totalAllowedMs - elapsedMs;
+  const timeRemainingSeconds = Math.max(0, Math.floor(remainingMs / 1000));
+  const isTimeExpired = timeRemainingSeconds <= 0;
+
+  return {
+    testStarted: true,
+    testStartedAt: startedMs,
+    totalDurationMinutes,
+    timeRemainingSeconds,
+    isTimeExpired
+  };
+}
+
+// POST Start Test Session (Pre-test Briefing -> Session Initialized)
+huntRouter.post('/start-test', requireAuth, async (req, res) => {
+  const user = req.user;
+  if (!(await checkAndEnforceDesktopDevice(req, res, user))) return;
+
+  const eventStatus = (await db.prepare("SELECT value FROM config WHERE key = 'event_status'").get())?.value || 'active';
+  if (eventStatus === 'paused') {
+    return res.status(403).json({ error: 'Event is currently paused by organizers. Test cannot be started right now.', eventStatus });
+  }
+  if (eventStatus === 'ended' || eventStatus === 'stopped') {
+    return res.status(403).json({ error: 'LOGIN Nethunt event has concluded. Test cannot be started.', eventStatus });
+  }
+
+  const now = Date.now();
+  if (!user.test_started_at) {
+    await db.prepare('UPDATE users SET test_started_at = ? WHERE id = ?').run(now, user.id);
+    user.test_started_at = now;
+
+    try {
+      await db.prepare(`
+        INSERT INTO proctor_logs (user_id, event_type, step_index, timestamp, metadata)
+        VALUES (?, 'TEST_STARTED', ?, ?, ?)
+      `).run(user.id, user.current_step || 0, now, JSON.stringify({ startedAt: now }));
+    } catch (e) {}
+
+    broadcastEvent('PROCTOR_VIOLATION', {
+      user_id: user.id,
+      name: user.name,
+      username: user.username,
+      batch: user.batch,
+      event_type: 'TEST_STARTED',
+      step_index: user.current_step || 0,
+      timestamp: now,
+      metadata: { startedAt: now },
+      totalViolations: user.tab_violations || 0
+    });
+  }
+
+  const timerState = await getSessionTimerState(user);
+  res.json({
+    success: true,
+    ...timerState,
+    message: `Test session initialized. You have ${timerState.totalDurationMinutes} minutes to complete the test.`
+  });
+});
+
 // GET Current Assigned Node (ZERO CLIENT-SIDE CLUE LEAKS)
 huntRouter.get('/current-node', requireAuth, async (req, res) => {
   const user = req.user;
@@ -88,6 +180,12 @@ huntRouter.get('/current-node', requireAuth, async (req, res) => {
   const totalSteps = path.length;
 
   const eventStatus = (await db.prepare("SELECT value FROM config WHERE key = 'event_status'").get())?.value || 'active';
+  const timerState = await getSessionTimerState(user);
+  if (timerState.isTimeExpired && !user.test_submitted_at) {
+    try {
+      await db.prepare('UPDATE users SET test_submitted_at = ? WHERE id = ?').run(Date.now(), user.id);
+    } catch (e) {}
+  }
 
   if (currentStep >= totalSteps) {
     return res.json({
@@ -96,7 +194,12 @@ huntRouter.get('/current-node', requireAuth, async (req, res) => {
       totalSteps,
       score: user.score,
       tabViolations: user.tab_violations || 0,
-      eventStatus
+      eventStatus,
+      testStarted: timerState.testStarted,
+      testStartedAt: timerState.testStartedAt,
+      totalDurationMinutes: timerState.totalDurationMinutes,
+      timeRemainingSeconds: timerState.timeRemainingSeconds,
+      isTimeExpired: timerState.isTimeExpired
     });
   }
 
@@ -143,6 +246,11 @@ huntRouter.get('/current-node', requireAuth, async (req, res) => {
     score: user.score,
     tabViolations: user.tab_violations || 0,
     eventStatus,
+    testStarted: timerState.testStarted,
+    testStartedAt: timerState.testStartedAt,
+    totalDurationMinutes: timerState.totalDurationMinutes,
+    timeRemainingSeconds: timerState.timeRemainingSeconds,
+    isTimeExpired: timerState.isTimeExpired,
     node: {
       code: node.node_code,
       title: node.title,
@@ -181,6 +289,34 @@ huntRouter.post('/submit', requireAuth, async (req, res) => {
       error: 'LOGIN Nethunt event has concluded. Submissions are closed.',
       eventStatus: 'ended'
     });
+  }
+
+  // Enforce server-authoritative timer
+  const timerState = await getSessionTimerState(user);
+  if (user.role !== 'admin') {
+    if (!timerState.testStarted) {
+      return res.status(403).json({
+        error: 'You must start the test session before submitting answers.',
+        testNotStarted: true
+      });
+    }
+    if (timerState.isTimeExpired) {
+      try {
+        await db.prepare(`
+          INSERT INTO proctor_logs (user_id, event_type, step_index, timestamp, metadata)
+          VALUES (?, 'TIME_EXPIRED', ?, ?, ?)
+        `).run(user.id, user.current_step || 0, Date.now(), JSON.stringify({ timeRemainingSeconds: 0 }));
+      } catch (e) {}
+      if (!user.test_submitted_at) {
+        try {
+          await db.prepare('UPDATE users SET test_submitted_at = ? WHERE id = ?').run(Date.now(), user.id);
+        } catch (e) {}
+      }
+      return res.status(403).json({
+        error: 'Test session has expired. Submissions are closed.',
+        timeExpired: true
+      });
+    }
   }
 
   // Enforce 5 attempts / 60 seconds sliding window
@@ -325,6 +461,23 @@ huntRouter.post('/unlock-hint', requireAuth, async (req, res) => {
       error: 'LOGIN Nethunt event has concluded. Hint unlocks are closed.',
       eventStatus: 'ended'
     });
+  }
+
+  // Enforce server-authoritative timer
+  const timerState = await getSessionTimerState(user);
+  if (user.role !== 'admin') {
+    if (!timerState.testStarted) {
+      return res.status(403).json({
+        error: 'You must start the test session before unlocking hints.',
+        testNotStarted: true
+      });
+    }
+    if (timerState.isTimeExpired) {
+      return res.status(403).json({
+        error: 'Test session has expired. Hint unlocks are closed.',
+        timeExpired: true
+      });
+    }
   }
 
   let path = [];

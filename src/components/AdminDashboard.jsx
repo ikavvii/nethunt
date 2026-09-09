@@ -36,7 +36,9 @@ import {
   Maximize,
   Minimize,
   AlertOctagon,
-  RefreshCw
+  RefreshCw,
+  Clock,
+  ShieldCheck
 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -437,6 +439,51 @@ export default function AdminDashboard() {
     } catch (e) {}
   };
 
+  // MANAGE: Grant Extra Time (+15m or +30m)
+  const handleGrantExtraTime = async (userId, minutes, name) => {
+    try {
+      const res = await fetch(`/api/admin/alumni/${userId}/timer`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ action: 'grant_extra_time', extraMinutes: minutes })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        fetchAlumni();
+      } else {
+        alert(data.error || 'Failed to grant extra time');
+      }
+    } catch (e) {
+      alert('Network error: ' + e.message);
+    }
+  };
+
+  // MANAGE: Reset Session Timer
+  const handleResetSessionTimer = async (userId, name) => {
+    if (!window.confirm(`Reset test session timer for ${name}? Participant will be allowed to re-start the test briefing and fresh countdown.`)) return;
+    try {
+      const res = await fetch(`/api/admin/alumni/${userId}/timer`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ action: 'reset_timer' })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        fetchAlumni();
+      } else {
+        alert(data.error || 'Failed to reset timer');
+      }
+    } catch (e) {
+      alert('Network error: ' + e.message);
+    }
+  };
+
   // === Node CRUD Handlers ===
   const resetNodeForm = () => {
     setFormCode('');
@@ -759,6 +806,7 @@ export default function AdminDashboard() {
                     <th className="py-3 px-4 text-center">Step</th>
                     <th className="py-3 px-4 text-center">Score</th>
                     <th className="py-3 px-4 text-center">Integrity</th>
+                    <th className="py-3 px-4 text-center">Session Timer</th>
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -831,6 +879,68 @@ export default function AdminDashboard() {
                           <span className="text-[11px] text-emerald-500 font-bold inline-flex items-center space-x-1">
                             <Check className="w-3 h-3 text-emerald-500" />
                             <span>CLEAN</span>
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-center font-mono text-xs">
+                        {al.timer_status === 'not_started' ? (
+                          <div className="flex flex-col items-center space-y-1">
+                            <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-800 text-slate-400 border theme-border">
+                              <Clock className="w-3 h-3 text-slate-400" />
+                              <span>NOT STARTED</span>
+                            </span>
+                            <span className="text-[10px] theme-text-muted">{al.total_duration_minutes || 120}m limit</span>
+                          </div>
+                        ) : al.timer_status === 'active' ? (
+                          <div className="flex flex-col items-center space-y-1">
+                            <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 animate-pulse">
+                              <Clock className="w-3 h-3 text-emerald-400" />
+                              <span>ACTIVE ({Math.floor(al.time_remaining_seconds / 60)}m)</span>
+                            </span>
+                            <div className="flex items-center space-x-1 text-[10px]">
+                              <button
+                                onClick={() => handleGrantExtraTime(al.id, 15, al.name)}
+                                className="px-1.5 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 cursor-pointer"
+                                title="Add 15 minutes to session"
+                              >
+                                +15m
+                              </button>
+                              <button
+                                onClick={() => handleGrantExtraTime(al.id, 30, al.name)}
+                                className="px-1.5 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 cursor-pointer"
+                                title="Add 30 minutes to session"
+                              >
+                                +30m
+                              </button>
+                            </div>
+                          </div>
+                        ) : al.timer_status === 'expired' ? (
+                          <div className="flex flex-col items-center space-y-1">
+                            <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/50">
+                              <Clock className="w-3 h-3 text-rose-400" />
+                              <span>EXPIRED</span>
+                            </span>
+                            <div className="flex items-center space-x-1 text-[10px]">
+                              <button
+                                onClick={() => handleGrantExtraTime(al.id, 15, al.name)}
+                                className="px-1.5 py-0.5 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 cursor-pointer"
+                                title="Grant +15m to unlock participant"
+                              >
+                                +15m Unlock
+                              </button>
+                              <button
+                                onClick={() => handleResetSessionTimer(al.id, al.name)}
+                                className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border theme-border cursor-pointer"
+                                title="Reset timer to re-initialize test"
+                              >
+                                Reset
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                            <Check className="w-3 h-3 text-cyan-300" />
+                            <span>COMPLETED</span>
                           </span>
                         )}
                       </td>
@@ -1391,6 +1501,20 @@ export default function AdminDashboard() {
                   <span>MOBILE_BLOCKED</span>
                 </span>
               );
+            case 'TEST_STARTED':
+              return (
+                <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                  <Play className="w-3 h-3 flex-shrink-0" />
+                  <span>TEST_STARTED</span>
+                </span>
+              );
+            case 'TIME_EXPIRED':
+              return (
+                <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-500/25 text-rose-400 border border-rose-500/50 animate-pulse">
+                  <Clock className="w-3 h-3 flex-shrink-0" />
+                  <span>TIME_EXPIRED</span>
+                </span>
+              );
             default:
               return (
                 <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-800 text-slate-300 border theme-border">
@@ -1407,6 +1531,8 @@ export default function AdminDashboard() {
           if (typeof meta === 'string') {
             try { obj = JSON.parse(meta); } catch (e) { return meta; }
           }
+          if (obj.durationMinutes) return `Session started with ${obj.durationMinutes}m duration limit`;
+          if (obj.message) return obj.message;
           if (obj.userAgent) return `Device Blocked: ${obj.userAgent.slice(0, 45)}...`;
           if (obj.reason) return obj.reason;
           if (obj.combo) return `Shortcut Pressed: ${obj.combo}`;
@@ -1475,6 +1601,8 @@ export default function AdminDashboard() {
                     <option value="CLIPBOARD_PASTE_ATTEMPT">CLIPBOARD_PASTE_ATTEMPT</option>
                     <option value="CLIPBOARD_COPY_ATTEMPT">CLIPBOARD_COPY_ATTEMPT</option>
                     <option value="MOBILE_DEVICE_BLOCKED">MOBILE_DEVICE_BLOCKED</option>
+                    <option value="TEST_STARTED">TEST_STARTED</option>
+                    <option value="TIME_EXPIRED">TIME_EXPIRED</option>
                   </select>
                 </div>
 
@@ -2039,6 +2167,52 @@ export default function AdminDashboard() {
                 <p className="theme-text-muted text-[11px] leading-relaxed">
                   Official 7-day competition schedule. Sliding-window rate limit (5 attempts / 60s) active with sub-millisecond tie breaking. Leaderboard cached in-memory.
                 </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Timed Session & Countdown Configuration */}
+          <div className="theme-bg-card border theme-border p-6 rounded-2xl shadow-sm space-y-4">
+            <div className="flex items-center space-x-2">
+              <Clock className="w-5 h-5 text-cyan-400" />
+              <h3 className="font-bold text-base theme-text-primary font-mono uppercase tracking-wider">
+                Test Session Time Limit &amp; Integrity Controls
+              </h3>
+            </div>
+            <p className="text-xs theme-text-muted font-mono">
+              Participants receive a single timed session during the 7-day competition window (11th Aug – 17th Aug 2026). Once initiated on their desktop/laptop, the server counts down continuously regardless of closing the tab or reloading.
+            </p>
+
+            <div className="space-y-3 pt-2 font-mono text-xs">
+              <label className="block theme-text-secondary font-bold">
+                &gt; DEFAULT TEST DURATION PER PARTICIPANT:
+              </label>
+              <div className="flex flex-wrap gap-3">
+                {[60, 90, 120, 150, 180].map(mins => (
+                  <button
+                    key={mins}
+                    onClick={async () => {
+                      await fetch('/api/admin/config', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                        body: JSON.stringify({ test_duration_minutes: mins })
+                      });
+                      setConfig(prev => ({ ...prev, test_duration_minutes: String(mins) }));
+                    }}
+                    className={`px-5 py-2.5 rounded-xl border font-mono font-bold transition-all cursor-pointer ${
+                      (config.test_duration_minutes || '120') === String(mins)
+                        ? 'bg-cyan-500 text-slate-950 border-cyan-500 shadow-sm'
+                        : 'theme-bg-surface theme-border theme-text-secondary hover:theme-text-primary'
+                    }`}
+                  >
+                    {mins} MINS {mins === 120 && '★ (RECOMMENDED)'}
+                  </button>
+                ))}
+              </div>
+              <div className="p-3.5 rounded-xl theme-bg-surface border theme-border text-[11px] theme-text-muted space-y-1">
+                <p>&bull; <strong className="text-cyan-400">Current Setting:</strong> {config.test_duration_minutes || 120} minutes ({((parseInt(config.test_duration_minutes || 120, 10)) / 60).toFixed(1)} hours) per participant.</p>
+                <p>&bull; <strong className="text-amber-400">Individual Override:</strong> You can grant +15m or +30m extra time to any participant individually from the Alumni Roster tab.</p>
+                <p>&bull; <strong className="text-emerald-400">Anti-Phone Rule:</strong> Submissions and hint unlocks are hard-locked on the server once the countdown expires.</p>
               </div>
             </div>
           </div>

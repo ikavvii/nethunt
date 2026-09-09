@@ -306,7 +306,8 @@ adminRouter.get('/alumni', async (req, res) => {
   const query = (req.query.q || '').trim().toLowerCase();
   let sql = `
     SELECT id, username, passkey, name, batch, email, phone, organization, role, current_step, score, 
-           tab_violations, is_disqualified, password_changed, created_at
+           tab_violations, is_disqualified, password_changed, test_started_at, test_duration_minutes,
+           extra_time_minutes, test_submitted_at, created_at
     FROM users
     WHERE role != 'admin'
   `;
@@ -324,7 +325,41 @@ adminRouter.get('/alumni', async (req, res) => {
 
   sql += ' ORDER BY score DESC, current_step DESC, created_at DESC';
   const alumni = await db.prepare(sql).all();
-  res.json({ alumni });
+
+  const globalDurationConfig = (await db.prepare("SELECT value FROM config WHERE key = 'test_duration_minutes'").get())?.value;
+  const globalDuration = parseInt(globalDurationConfig || '120', 10);
+  const now = Date.now();
+
+  const enrichedAlumni = alumni.map(a => {
+    const totalDurationMinutes = (a.test_duration_minutes || globalDuration) + (a.extra_time_minutes || 0);
+    let timerStatus = 'not_started';
+    let timeRemainingSeconds = totalDurationMinutes * 60;
+
+    if (a.test_started_at) {
+      const startedMs = !isNaN(Number(a.test_started_at))
+        ? Number(a.test_started_at)
+        : new Date(a.test_started_at).getTime();
+      const elapsedMs = now - startedMs;
+      const remainingMs = totalDurationMinutes * 60 * 1000 - elapsedMs;
+      timeRemainingSeconds = Math.max(0, Math.floor(remainingMs / 1000));
+      if (a.test_submitted_at) {
+        timerStatus = 'completed';
+      } else if (timeRemainingSeconds <= 0) {
+        timerStatus = 'expired';
+      } else {
+        timerStatus = 'active';
+      }
+    }
+
+    return {
+      ...a,
+      total_duration_minutes: totalDurationMinutes,
+      time_remaining_seconds: timeRemainingSeconds,
+      timer_status: timerStatus
+    };
+  });
+
+  res.json({ alumni: enrichedAlumni });
 });
 
 // EXPORT All Alumni
@@ -394,14 +429,40 @@ adminRouter.post('/alumni/:id/reset', async (req, res) => {
   const user = await db.prepare('SELECT id FROM users WHERE id = ?').get(req.params.id);
   if (!user) return res.status(404).json({ error: 'Alumni record not found' });
 
-  await db.prepare('UPDATE users SET current_step = 0, score = 0, tab_violations = 0, last_solved_subms = 0 WHERE id = ?').run(req.params.id);
+  await db.prepare('UPDATE users SET current_step = 0, score = 0, tab_violations = 0, last_solved_subms = 0, test_started_at = NULL, extra_time_minutes = 0, test_submitted_at = NULL WHERE id = ?').run(req.params.id);
   await db.prepare('DELETE FROM user_node_progress WHERE user_id = ?').run(req.params.id);
   await db.prepare('DELETE FROM submissions WHERE user_id = ?').run(req.params.id);
 
   await assignPathToUser(user.id);
   await leaderboardCache.refreshNow();
 
-  res.json({ success: true, message: 'Alumni progress reset to Step 0 with new randomized trajectory.' });
+  res.json({ success: true, message: 'Alumni progress reset to Step 0 with new randomized trajectory and timer cleared.' });
+});
+
+// MANAGE Alumni Session Timer (Grant extra time or Reset timer)
+adminRouter.post('/alumni/:id/timer', async (req, res) => {
+  const { action, extraMinutes } = req.body;
+  const user = await db.prepare('SELECT id, name, test_started_at, extra_time_minutes FROM users WHERE id = ?').get(req.params.id);
+  if (!user) return res.status(404).json({ error: 'Alumni record not found' });
+
+  if (action === 'grant_extra_time') {
+    const mins = parseInt(extraMinutes || 15, 10);
+    const newExtra = (user.extra_time_minutes || 0) + mins;
+    await db.prepare('UPDATE users SET extra_time_minutes = ? WHERE id = ?').run(newExtra, user.id);
+    return res.json({
+      success: true,
+      message: `Granted +${mins} minutes extra test time to ${user.name}.`,
+      extra_time_minutes: newExtra
+    });
+  } else if (action === 'reset_timer') {
+    await db.prepare('UPDATE users SET test_started_at = NULL, extra_time_minutes = 0, test_submitted_at = NULL WHERE id = ?').run(user.id);
+    return res.json({
+      success: true,
+      message: `Test session timer reset for ${user.name}. Participant can now re-initialize their test.`
+    });
+  } else {
+    return res.status(400).json({ error: 'Invalid action. Supported: grant_extra_time, reset_timer' });
+  }
 });
 
 // RESET Alumni Passkey to Registered Phone
@@ -581,7 +642,7 @@ adminRouter.get('/config', async (req, res) => {
 });
 
 adminRouter.post('/config', async (req, res) => {
-  const { event_status, path_length, event_end_time, new_admin_key, leaderboard_visible } = req.body;
+  const { event_status, path_length, event_end_time, new_admin_key, leaderboard_visible, test_duration_minutes } = req.body;
   const setConfig = db.prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)');
 
   if (event_status) {
@@ -596,6 +657,7 @@ adminRouter.post('/config', async (req, res) => {
     broadcastEvent('LEADERBOARD_VISIBILITY_CHANGED', { visible: isVisible });
   }
   if (path_length) await setConfig.run('path_length', String(path_length));
+  if (test_duration_minutes) await setConfig.run('test_duration_minutes', String(test_duration_minutes));
   if (event_end_time) await setConfig.run('event_end_time', String(event_end_time));
   if (new_admin_key && typeof new_admin_key === 'string' && new_admin_key.trim().length >= 6) {
     const cleanKey = new_admin_key.trim();

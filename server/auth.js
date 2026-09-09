@@ -30,7 +30,8 @@ export async function requireAuth(req, res, next) {
     const user = await db.prepare(`
       SELECT id, username, name, batch, email, phone, organization, role, 
              assigned_path_json, current_step, score, tab_violations, is_disqualified, 
-             passkey, password_changed, created_at
+             passkey, password_changed, test_started_at, test_duration_minutes, 
+             extra_time_minutes, test_submitted_at, created_at
       FROM users WHERE id = ?
     `).get(decoded.id);
 
