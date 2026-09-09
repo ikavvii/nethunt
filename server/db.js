@@ -277,8 +277,11 @@ async function seedSystem() {
   const admKey = await getConfig.get('admin_key');
   if (!admKey) await setConfig.run('admin_key', process.env.ADMIN_KEY || process.env.ADMIN_PASSKEY || 'login2026admin');
   
-  // Level up default trajectory to 20 nodes
-  await setConfig.run('path_length', '20');
+  // Set optimal 1-hour session default trajectory (12 nodes)
+  const currentPathLength = await getConfig.get('path_length');
+  if (!currentPathLength || currentPathLength.value === '20') {
+    await setConfig.run('path_length', '12');
+  }
 
   const evStartDate = await getConfig.get('event_start_date');
   if (!evStartDate) await setConfig.run('event_start_date', '2026-08-11T00:00:00+05:30');
@@ -294,8 +297,11 @@ async function seedSystem() {
   const lbVisible = await getConfig.get('leaderboard_visible');
   if (!lbVisible) await setConfig.run('leaderboard_visible', 'true');
 
+  // Set optimal 1-hour session duration default (60 minutes)
   const testDur = await getConfig.get('test_duration_minutes');
-  if (!testDur) await setConfig.run('test_duration_minutes', '120');
+  if (!testDur || testDur.value === '120') {
+    await setConfig.run('test_duration_minutes', '60');
+  }
 
   // Admin user
   const adminUser = await db.prepare("SELECT id FROM users WHERE username = 'admin'").get();
@@ -321,7 +327,7 @@ async function seedSystem() {
 
 export async function assignPathToUser(userId) {
   const pathLengthRow = await db.prepare("SELECT value FROM config WHERE key = 'path_length'").get();
-  const pathLength = parseInt(pathLengthRow?.value || '20');
+  const pathLength = parseInt(pathLengthRow?.value || '12');
   
   const foundationNodes = (await db.prepare("SELECT id FROM nodes WHERE tier = 'foundation' ORDER BY id ASC").all()).map(n => n.id);
   const lateralNodes = (await db.prepare("SELECT id FROM nodes WHERE tier = 'lateral' ORDER BY id ASC").all()).map(n => n.id);

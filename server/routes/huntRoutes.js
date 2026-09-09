@@ -77,14 +77,14 @@ export async function getSessionTimerState(user) {
     return {
       testStarted: true,
       testStartedAt: user.test_started_at || Date.now(),
-      totalDurationMinutes: 120,
-      timeRemainingSeconds: 7200,
+      totalDurationMinutes: 60,
+      timeRemainingSeconds: 3600,
       isTimeExpired: false
     };
   }
 
   const globalDurationConfig = (await db.prepare("SELECT value FROM config WHERE key = 'test_duration_minutes'").get())?.value;
-  const globalDuration = parseInt(globalDurationConfig || '120', 10);
+  const globalDuration = parseInt(globalDurationConfig || '60', 10);
   const userDuration = user.test_duration_minutes ? Number(user.test_duration_minutes) : globalDuration;
   const extraMinutes = Number(user.extra_time_minutes || 0);
   const totalDurationMinutes = userDuration + extraMinutes;

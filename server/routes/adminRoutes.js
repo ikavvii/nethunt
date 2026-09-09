@@ -327,7 +327,7 @@ adminRouter.get('/alumni', async (req, res) => {
   const alumni = await db.prepare(sql).all();
 
   const globalDurationConfig = (await db.prepare("SELECT value FROM config WHERE key = 'test_duration_minutes'").get())?.value;
-  const globalDuration = parseInt(globalDurationConfig || '120', 10);
+  const globalDuration = parseInt(globalDurationConfig || '60', 10);
   const now = Date.now();
 
   const enrichedAlumni = alumni.map(a => {

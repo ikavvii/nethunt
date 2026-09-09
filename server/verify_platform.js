@@ -150,14 +150,14 @@ async function runRigorousTests() {
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
       body: JSON.stringify(alumA)
     }).then(r => r.json());
-    assert(regA.user?.nodesCount === 20, `TRAJECTORY: Alumni path generated with exactly 20 nodes (got ${regA.user?.nodesCount})`);
+    assert(regA.user?.nodesCount === 12, `TRAJECTORY: Alumni path generated with exactly 12 nodes (got ${regA.user?.nodesCount})`);
 
     const regB = await fetch(`${BASE}/api/admin/alumni`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
       body: JSON.stringify(alumB)
     }).then(r => r.json());
-    assert(regB.user?.nodesCount === 20, 'TRAJECTORY: Alumni B path generated with 20 nodes');
+    assert(regB.user?.nodesCount === 12, 'TRAJECTORY: Alumni B path generated with 12 nodes');
 
     const loginA = await fetch(`${BASE}/api/auth/login`, {
       method: 'POST',
@@ -179,7 +179,7 @@ async function runRigorousTests() {
       headers: { 'Authorization': `Bearer ${loginB.token}` }
     }).then(r => r.json());
 
-    assert(nodeA.totalSteps === 20, `TRAJECTORY ARENA: Player Arena reports 20 total challenge steps (got ${nodeA.totalSteps})`);
+    assert(nodeA.totalSteps === 12, `TRAJECTORY ARENA: Player Arena reports 12 total challenge steps (got ${nodeA.totalSteps})`);
 
     // 5. Zero Client-Side Clue Leaks Check
     assert(nodeA.node && nodeA.node.answer === undefined, 'ZERO LEAK: Plaintext answer is NOT sent in client payload');
@@ -726,8 +726,8 @@ async function runRigorousTests() {
       headers: { 'Authorization': `Bearer ${loginTimer.token}` }
     }).then(r => r.json());
     assert(preTestNodeRes.testStarted === false, 'TIMED SESSION: Participant testStarted is false before briefing initiation');
-    assert(preTestNodeRes.totalDurationMinutes === 120, 'TIMED SESSION: Default total duration is 120 minutes');
-    assert(preTestNodeRes.timeRemainingSeconds === 7200, 'TIMED SESSION: Time remaining is 7200s (120 mins)');
+    assert(preTestNodeRes.totalDurationMinutes === 60, 'TIMED SESSION: Default total duration is 60 minutes');
+    assert(preTestNodeRes.timeRemainingSeconds === 3600, 'TIMED SESSION: Time remaining is 3600s (60 mins)');
     assert(preTestNodeRes.isTimeExpired === false, 'TIMED SESSION: isTimeExpired is false');
 
     // 20C: Submissions and hints are blocked before test is started
@@ -760,7 +760,7 @@ async function runRigorousTests() {
     }).then(r => r.json());
     assert(startTestRes.success === true, 'TIMED SESSION: /api/hunt/start-test initiates test successfully');
     assert(startTestRes.testStartedAt, 'TIMED SESSION: start-test returns testStartedAt timestamp');
-    assert(startTestRes.totalDurationMinutes === 120, 'TIMED SESSION: start-test reports 120 minutes total duration');
+    assert(startTestRes.totalDurationMinutes === 60, 'TIMED SESSION: start-test reports 60 minutes total duration');
 
     // Verify TEST_STARTED logged in proctor audit
     const startLog = await db.prepare("SELECT * FROM proctor_logs WHERE event_type = 'TEST_STARTED' AND user_id = ?").get(loginTimer.user.id);
@@ -771,7 +771,7 @@ async function runRigorousTests() {
       headers: { 'Authorization': `Bearer ${loginTimer.token}` }
     }).then(r => r.json());
     assert(activeTestNodeRes.testStarted === true, 'TIMED SESSION: Participant testStarted is now true');
-    assert(activeTestNodeRes.timeRemainingSeconds <= 7200 && activeTestNodeRes.timeRemainingSeconds > 7100, 'TIMED SESSION: Time remaining active countdown between 7100s and 7200s');
+    assert(activeTestNodeRes.timeRemainingSeconds <= 3600 && activeTestNodeRes.timeRemainingSeconds > 3500, 'TIMED SESSION: Time remaining active countdown between 3500s and 3600s');
 
     // 20F: Admin grants extra time (+15m)
     const grantTimeRes = await fetch(`${BASE}/api/admin/alumni/${loginTimer.user.id}/timer`, {
@@ -787,8 +787,8 @@ async function runRigorousTests() {
     const extendedNodeRes = await fetch(`${BASE}/api/hunt/current-node`, {
       headers: { 'Authorization': `Bearer ${loginTimer.token}` }
     }).then(r => r.json());
-    assert(extendedNodeRes.totalDurationMinutes === 135, 'TIMED SESSION: Total duration updated to 135 minutes after +15m grant');
-    assert(extendedNodeRes.timeRemainingSeconds > 7200, 'TIMED SESSION: Time remaining increased with extra 15m');
+    assert(extendedNodeRes.totalDurationMinutes === 75, 'TIMED SESSION: Total duration updated to 75 minutes after +15m grant');
+    assert(extendedNodeRes.timeRemainingSeconds > 3600, 'TIMED SESSION: Time remaining increased with extra 15m');
 
     // 20G: Simulate timer expiration on test participant
     // Set test_started_at to 3 hours ago (180 mins ago)
@@ -844,8 +844,9 @@ async function runRigorousTests() {
     const dbConfigDuration = await db.prepare("SELECT value FROM config WHERE key = 'test_duration_minutes'").get();
     assert(dbConfigDuration.value === '90', 'ADMIN CONFIG: Database config persists test_duration_minutes = 90');
 
-    // Reset back to 120 for normal operation
-    await db.prepare("UPDATE config SET value = '120' WHERE key = 'test_duration_minutes'").run();
+    // Reset back to 60 minutes and 12 nodes for normal operation
+    await db.prepare("UPDATE config SET value = '60' WHERE key = 'test_duration_minutes'").run();
+    await db.prepare("UPDATE config SET value = '12' WHERE key = 'path_length'").run();
 
     // Clean up: Reset back to default in db for clean state
     await db.prepare("UPDATE config SET value = 'login2026admin' WHERE key = 'admin_key'").run();

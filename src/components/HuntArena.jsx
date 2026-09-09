@@ -417,7 +417,7 @@ export default function HuntArena({ onOpenAuth, onNavigateToLeaderboard }) {
     return (
       <TestStartBriefing 
         user={user}
-        durationMinutes={currentNodeData?.totalDurationMinutes || 120}
+        durationMinutes={currentNodeData?.totalDurationMinutes || 60}
         onStartTest={handleStartTest}
         loading={startingTest}
       />
@@ -548,7 +548,7 @@ export default function HuntArena({ onOpenAuth, onNavigateToLeaderboard }) {
 
   const node = currentNodeData?.node;
   const currentStep = currentNodeData?.currentStep || 0;
-  const totalSteps = currentNodeData?.totalSteps || 10;
+  const totalSteps = currentNodeData?.totalSteps || 12;
 
   return (
     <div className="max-w-[1700px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">

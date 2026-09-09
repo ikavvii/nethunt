@@ -14,7 +14,7 @@ import {
 
 export default function TestStartBriefing({ 
   user, 
-  durationMinutes = 120, 
+  durationMinutes = 60, 
   onStartTest, 
   loading = false 
 }) {

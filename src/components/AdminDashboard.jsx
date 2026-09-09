@@ -853,7 +853,13 @@ export default function AdminDashboard() {
                         <p className="text-amber-400 font-bold mt-0.5">Pass: {al.passkey}</p>
                       </td>
                       <td className="py-3 px-4 text-center font-mono font-bold text-emerald-400">
-                        Step {al.current_step} / 20
+                        Step {al.current_step} / {(() => {
+                          try {
+                            const p = JSON.parse(al.assigned_path_json);
+                            if (Array.isArray(p) && p.length) return p.length;
+                          } catch (e) {}
+                          return config.path_length || 12;
+                        })()}
                       </td>
                       <td className="py-3 px-4 text-center font-mono font-black text-sm text-cyan-300">
                         {al.score}
@@ -889,7 +895,7 @@ export default function AdminDashboard() {
                               <Clock className="w-3 h-3 text-slate-400" />
                               <span>NOT STARTED</span>
                             </span>
-                            <span className="text-[10px] theme-text-muted">{al.total_duration_minutes || 120}m limit</span>
+                            <span className="text-[10px] theme-text-muted">{al.total_duration_minutes || 60}m limit</span>
                           </div>
                         ) : al.timer_status === 'active' ? (
                           <div className="flex flex-col items-center space-y-1">
@@ -2151,12 +2157,12 @@ export default function AdminDashboard() {
                         setConfig(prev => ({ ...prev, path_length: String(num) }));
                       }}
                       className={`px-5 py-2.5 rounded-xl border font-mono font-bold transition-all cursor-pointer ${
-                        config.path_length === String(num)
+                        (config.path_length || '12') === String(num)
                           ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-sm'
                           : 'theme-bg-surface theme-border theme-text-secondary hover:theme-text-primary'
                       }`}
                     >
-                      {num} NODES {num === 20 && '★ (OFFICIAL)'}
+                      {num} NODES {num === 12 && '★ (OFFICIAL 1-HR SPRINT)'}
                     </button>
                   ))}
                 </div>
@@ -2200,17 +2206,17 @@ export default function AdminDashboard() {
                       setConfig(prev => ({ ...prev, test_duration_minutes: String(mins) }));
                     }}
                     className={`px-5 py-2.5 rounded-xl border font-mono font-bold transition-all cursor-pointer ${
-                      (config.test_duration_minutes || '120') === String(mins)
+                      (config.test_duration_minutes || '60') === String(mins)
                         ? 'bg-cyan-500 text-slate-950 border-cyan-500 shadow-sm'
                         : 'theme-bg-surface theme-border theme-text-secondary hover:theme-text-primary'
                     }`}
                   >
-                    {mins} MINS {mins === 120 && '★ (RECOMMENDED)'}
+                    {mins} MINS {mins === 60 && '★ (RECOMMENDED 1-HR SPRINT)'}
                   </button>
                 ))}
               </div>
               <div className="p-3.5 rounded-xl theme-bg-surface border theme-border text-[11px] theme-text-muted space-y-1">
-                <p>&bull; <strong className="text-cyan-400">Current Setting:</strong> {config.test_duration_minutes || 120} minutes ({((parseInt(config.test_duration_minutes || 120, 10)) / 60).toFixed(1)} hours) per participant.</p>
+                <p>&bull; <strong className="text-cyan-400">Current Setting:</strong> {config.test_duration_minutes || 60} minutes ({((parseInt(config.test_duration_minutes || 60, 10)) / 60).toFixed(1)} hours) per participant.</p>
                 <p>&bull; <strong className="text-amber-400">Individual Override:</strong> You can grant +15m or +30m extra time to any participant individually from the Alumni Roster tab.</p>
                 <p>&bull; <strong className="text-emerald-400">Anti-Phone Rule:</strong> Submissions and hint unlocks are hard-locked on the server once the countdown expires.</p>
               </div>
