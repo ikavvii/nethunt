@@ -132,6 +132,30 @@ huntRouter.post('/start-test', requireAuth, async (req, res) => {
   }
 
   const now = Date.now();
+  const startDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_start_date'").get())?.value || '2026-08-12T09:00:00+05:30';
+  const endDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_end_date'").get())?.value || '2026-08-18T09:00:00+05:30';
+
+  if (user.role !== 'admin') {
+    const startMs = new Date(startDateStr).getTime();
+    if (!isNaN(startMs) && now < startMs) {
+      return res.status(403).json({
+        error: `Event has not started yet. The test opens on 12th Aug 2026 at 9:00 AM (09:00 AM IST).`,
+        notStartedYet: true,
+        eventStartDate: startDateStr,
+        timeUntilStartSeconds: Math.max(0, Math.floor((startMs - now) / 1000))
+      });
+    }
+
+    const endMs = new Date(endDateStr).getTime();
+    if (!isNaN(endMs) && now > endMs) {
+      return res.status(403).json({
+        error: `Event window has closed. The competition concluded on 18th Aug 2026.`,
+        eventEnded: true,
+        eventEndDate: endDateStr
+      });
+    }
+  }
+
   if (!user.test_started_at) {
     await db.prepare('UPDATE users SET test_started_at = ? WHERE id = ?').run(now, user.id);
     user.test_started_at = now;
@@ -180,6 +204,15 @@ huntRouter.get('/current-node', requireAuth, async (req, res) => {
   const totalSteps = path.length;
 
   const eventStatus = (await db.prepare("SELECT value FROM config WHERE key = 'event_status'").get())?.value || 'active';
+  const startDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_start_date'").get())?.value || '2026-08-12T09:00:00+05:30';
+  const endDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_end_date'").get())?.value || '2026-08-18T09:00:00+05:30';
+  const now = Date.now();
+  const startMs = new Date(startDateStr).getTime();
+  const endMs = new Date(endDateStr).getTime();
+  const isBeforeEventStart = user.role !== 'admin' && !isNaN(startMs) && now < startMs;
+  const isAfterEventEnd = user.role !== 'admin' && !isNaN(endMs) && now > endMs;
+  const timeUntilStartSeconds = isBeforeEventStart ? Math.max(0, Math.floor((startMs - now) / 1000)) : 0;
+
   const timerState = await getSessionTimerState(user);
   if (timerState.isTimeExpired && !user.test_submitted_at) {
     try {
@@ -195,6 +228,11 @@ huntRouter.get('/current-node', requireAuth, async (req, res) => {
       score: user.score,
       tabViolations: user.tab_violations || 0,
       eventStatus,
+      eventStartDate: startDateStr,
+      eventEndDate: endDateStr,
+      isBeforeEventStart,
+      isAfterEventEnd,
+      timeUntilStartSeconds,
       testStarted: timerState.testStarted,
       testStartedAt: timerState.testStartedAt,
       totalDurationMinutes: timerState.totalDurationMinutes,
@@ -246,6 +284,11 @@ huntRouter.get('/current-node', requireAuth, async (req, res) => {
     score: user.score,
     tabViolations: user.tab_violations || 0,
     eventStatus,
+    eventStartDate: startDateStr,
+    eventEndDate: endDateStr,
+    isBeforeEventStart,
+    isAfterEventEnd,
+    timeUntilStartSeconds,
     testStarted: timerState.testStarted,
     testStartedAt: timerState.testStartedAt,
     totalDurationMinutes: timerState.totalDurationMinutes,
@@ -289,6 +332,30 @@ huntRouter.post('/submit', requireAuth, async (req, res) => {
       error: 'LOGIN Nethunt event has concluded. Submissions are closed.',
       eventStatus: 'ended'
     });
+  }
+
+  const now = Date.now();
+  const startDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_start_date'").get())?.value || '2026-08-12T09:00:00+05:30';
+  const endDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_end_date'").get())?.value || '2026-08-18T09:00:00+05:30';
+
+  if (user.role !== 'admin') {
+    const startMs = new Date(startDateStr).getTime();
+    if (!isNaN(startMs) && now < startMs) {
+      return res.status(403).json({
+        error: 'Event has not started yet. Submissions are not accepted yet.',
+        notStartedYet: true,
+        eventStartDate: startDateStr
+      });
+    }
+
+    const endMs = new Date(endDateStr).getTime();
+    if (!isNaN(endMs) && now > endMs) {
+      return res.status(403).json({
+        error: 'Event window has closed. Submissions are closed.',
+        eventEnded: true,
+        eventEndDate: endDateStr
+      });
+    }
   }
 
   // Enforce server-authoritative timer
@@ -461,6 +528,30 @@ huntRouter.post('/unlock-hint', requireAuth, async (req, res) => {
       error: 'LOGIN Nethunt event has concluded. Hint unlocks are closed.',
       eventStatus: 'ended'
     });
+  }
+
+  const now = Date.now();
+  const startDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_start_date'").get())?.value || '2026-08-12T09:00:00+05:30';
+  const endDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_end_date'").get())?.value || '2026-08-18T09:00:00+05:30';
+
+  if (user.role !== 'admin') {
+    const startMs = new Date(startDateStr).getTime();
+    if (!isNaN(startMs) && now < startMs) {
+      return res.status(403).json({
+        error: 'Event has not started yet. Hint unlocks are not available yet.',
+        notStartedYet: true,
+        eventStartDate: startDateStr
+      });
+    }
+
+    const endMs = new Date(endDateStr).getTime();
+    if (!isNaN(endMs) && now > endMs) {
+      return res.status(403).json({
+        error: 'Event window has closed. Hint unlocks are closed.',
+        eventEnded: true,
+        eventEndDate: endDateStr
+      });
+    }
   }
 
   // Enforce server-authoritative timer

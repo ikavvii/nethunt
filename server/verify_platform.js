@@ -190,6 +190,16 @@ async function runRigorousTests() {
     // 6. Verify Anti-Collusion Trajectories
     assert(nodeA.node.code !== nodeB.node.code, `ANTI-COLLUSION: Alumni A starts on ${nodeA.node.code}, Alumni B starts on ${nodeB.node.code}`);
 
+    // Ensure active test window for automated test gameplay execution
+    await fetch(`${BASE}/api/admin/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+      body: JSON.stringify({
+        event_start_date: new Date(Date.now() - 3600000).toISOString(),
+        event_end_date: new Date(Date.now() + 7 * 86400000).toISOString()
+      })
+    });
+
     // Start test session for both participants so they can proceed with gameplay
     await fetch(`${BASE}/api/hunt/start-test`, {
       method: 'POST',
@@ -673,12 +683,21 @@ async function runRigorousTests() {
     const clearedUser = await db.prepare('SELECT tab_violations FROM users WHERE id = ?').get(loginB.user.id);
     assert(clearedUser.tab_violations === 0, 'ADMIN PROCTOR: Database confirms alumnus tab_violations is now 0');
 
-    console.log('\n--- Verifying Event Window (11-17 Aug) & Desktop-Only Device Enforcement ---');
-    // 19A: Verify Event Status endpoint returns official 11th Aug - 17th Aug 2026 window
+    console.log('\n--- Verifying Event Window (12-18 Aug) & Time-Gating Controls ---');
+    // 19A: Configure and verify official 12th Aug - 18th Aug 2026 event schedule
+    await fetch(`${BASE}/api/admin/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+      body: JSON.stringify({
+        event_start_date: '2026-08-12T09:00:00+05:30',
+        event_end_date: '2026-08-18T09:00:00+05:30'
+      })
+    });
+
     const evStatusRes = await fetch(`${BASE}/api/events/status`).then(r => r.json());
-    assert(evStatusRes.eventWindow === '11th Aug 2026 – 17th Aug 2026', 'EVENT WINDOW: /api/events/status reports 11th Aug 2026 – 17th Aug 2026');
-    assert(evStatusRes.eventStartDate === '2026-08-11T00:00:00+05:30', 'EVENT WINDOW: Start date is 2026-08-11T00:00:00+05:30');
-    assert(evStatusRes.eventEndDate === '2026-08-17T23:59:59+05:30', 'EVENT WINDOW: End date is 2026-08-17T23:59:59+05:30');
+    assert(evStatusRes.eventWindow === '12th Aug 2026 (09:00 AM) – 18th Aug 2026 (09:00 AM)', 'EVENT WINDOW: /api/events/status reports 12th Aug 2026 (09:00 AM) – 18th Aug 2026 (09:00 AM)');
+    assert(evStatusRes.eventStartDate === '2026-08-12T09:00:00+05:30', 'EVENT WINDOW: Start date is 2026-08-12T09:00:00+05:30');
+    assert(evStatusRes.eventEndDate === '2026-08-18T09:00:00+05:30', 'EVENT WINDOW: End date is 2026-08-18T09:00:00+05:30');
 
     // 19B: Mobile device blocking on current-node endpoint
     const mobileUA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1';
@@ -716,6 +735,48 @@ async function runRigorousTests() {
       }
     });
     assert(adminMobileCurrentNode.status !== 403, 'DEVICE INTEGRITY: Game Master admin exempt from mobile device block');
+
+    // 19F: Time-Gating: Future Start Date blocks participant start-test
+    const futureDateStr = new Date(Date.now() + 86400000).toISOString();
+    await fetch(`${BASE}/api/admin/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+      body: JSON.stringify({ event_start_date: futureDateStr })
+    });
+
+    const futureStartTestRes = await fetch(`${BASE}/api/hunt/start-test`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${loginB.token}` }
+    });
+    assert(futureStartTestRes.status === 403, 'TIME-GATING: Participant start-test blocked with HTTP 403 before event start date');
+    const futureJson = await futureStartTestRes.json();
+    assert(futureJson.notStartedYet === true && futureJson.timeUntilStartSeconds > 0, 'TIME-GATING: Response reports notStartedYet = true and active countdown');
+
+    // 19G: Time-Gating: Past End Date blocks participant start-test
+    const pastDateStr = new Date(Date.now() - 3600000).toISOString();
+    await fetch(`${BASE}/api/admin/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+      body: JSON.stringify({ event_start_date: new Date(Date.now() - 7200000).toISOString(), event_end_date: pastDateStr })
+    });
+
+    const pastStartTestRes = await fetch(`${BASE}/api/hunt/start-test`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${loginB.token}` }
+    });
+    assert(pastStartTestRes.status === 403, 'TIME-GATING: Participant start-test blocked with HTTP 403 after event end date');
+    const pastJson = await pastStartTestRes.json();
+    assert(pastJson.eventEnded === true, 'TIME-GATING: Response reports eventEnded = true');
+
+    // 19H: Open event window dynamically for subsequent timer lifecycle verification
+    await fetch(`${BASE}/api/admin/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+      body: JSON.stringify({
+        event_start_date: new Date(Date.now() - 3600000).toISOString(),
+        event_end_date: new Date(Date.now() + 7 * 86400000).toISOString()
+      })
+    });
 
     console.log('\n--- Section 20: Verifying 104 Puzzles Pool & Timed Test Session System ---');
     // 20A: Verify 104 puzzles populated in DB with Login'26 Puzzles-add (NODE_ADD_01 to NODE_ADD_44)
@@ -877,6 +938,9 @@ async function runRigorousTests() {
     await db.prepare("UPDATE users SET passkey = 'login2026admin' WHERE username = 'admin'").run();
     await db.prepare("UPDATE config SET value = 'active' WHERE key = 'event_status'").run();
     await db.prepare("UPDATE config SET value = 'true' WHERE key = 'leaderboard_visible'").run();
+    await db.prepare("UPDATE config SET value = '2026-08-12T09:00:00+05:30' WHERE key = 'event_start_date'").run();
+    await db.prepare("UPDATE config SET value = '2026-08-18T09:00:00+05:30' WHERE key = 'event_end_date'").run();
+    await db.prepare("UPDATE config SET value = ? WHERE key = 'event_end_time'").run(String(new Date('2026-08-18T09:00:00+05:30').getTime()));
 
     console.log('\n================================================================');
     console.log(`  ALL CRITICAL OBJECTIVES VERIFIED: ${passed} PASSED, ${failed} FAILED`);

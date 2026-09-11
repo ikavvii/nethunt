@@ -34,22 +34,35 @@ app.get('/api/events/status', async (req, res) => {
     const evStatus = (await db.prepare("SELECT value FROM config WHERE key = 'event_status'").get())?.value || 'active';
     const lbRow = await db.prepare("SELECT value FROM config WHERE key = 'leaderboard_visible'").get();
     const lbVisible = (!lbRow || lbRow.value === undefined || lbRow.value === null) ? true : (lbRow.value === 'true' || lbRow.value === '1');
-    const startDate = (await db.prepare("SELECT value FROM config WHERE key = 'event_start_date'").get())?.value || '2026-08-11T00:00:00+05:30';
-    const endDate = (await db.prepare("SELECT value FROM config WHERE key = 'event_end_date'").get())?.value || '2026-08-17T23:59:59+05:30';
+    const startDate = (await db.prepare("SELECT value FROM config WHERE key = 'event_start_date'").get())?.value || '2026-08-12T09:00:00+05:30';
+    const endDate = (await db.prepare("SELECT value FROM config WHERE key = 'event_end_date'").get())?.value || '2026-08-18T09:00:00+05:30';
+    
+    const now = Date.now();
+    const startMs = new Date(startDate).getTime();
+    const endMs = new Date(endDate).getTime();
+    const isBeforeStart = !isNaN(startMs) && now < startMs;
+    const isAfterEnd = !isNaN(endMs) && now > endMs;
+
     res.json({ 
       status: evStatus, 
       leaderboardVisible: lbVisible,
       eventStartDate: startDate,
       eventEndDate: endDate,
-      eventWindow: '11th Aug 2026 – 17th Aug 2026'
+      eventStartTimeMs: startMs,
+      eventEndTimeMs: endMs,
+      isBeforeStart,
+      isAfterEnd,
+      timeUntilStartSeconds: isBeforeStart ? Math.max(0, Math.floor((startMs - now) / 1000)) : 0,
+      timeUntilEndSeconds: !isAfterEnd ? Math.max(0, Math.floor((endMs - now) / 1000)) : 0,
+      eventWindow: '12th Aug 2026 (09:00 AM) – 18th Aug 2026 (09:00 AM)'
     });
   } catch (e) {
     res.json({ 
       status: 'active', 
       leaderboardVisible: true,
-      eventStartDate: '2026-08-11T00:00:00+05:30',
-      eventEndDate: '2026-08-17T23:59:59+05:30',
-      eventWindow: '11th Aug 2026 – 17th Aug 2026'
+      eventStartDate: '2026-08-12T09:00:00+05:30',
+      eventEndDate: '2026-08-18T09:00:00+05:30',
+      eventWindow: '12th Aug 2026 (09:00 AM) – 18th Aug 2026 (09:00 AM)'
     });
   }
 });

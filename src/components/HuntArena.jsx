@@ -437,6 +437,11 @@ export default function HuntArena({ onOpenAuth, onNavigateToLeaderboard }) {
         durationMinutes={currentNodeData?.totalDurationMinutes || 60}
         onStartTest={handleStartTest}
         loading={startingTest}
+        isBeforeEventStart={currentNodeData?.isBeforeEventStart}
+        isAfterEventEnd={currentNodeData?.isAfterEventEnd}
+        timeUntilStartSeconds={currentNodeData?.timeUntilStartSeconds}
+        eventStartDate={currentNodeData?.eventStartDate}
+        eventEndDate={currentNodeData?.eventEndDate}
       />
     );
   }

@@ -38,7 +38,8 @@ import {
   AlertOctagon,
   RefreshCw,
   Clock,
-  ShieldCheck
+  ShieldCheck,
+  Calendar
 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -141,6 +142,66 @@ export default function AdminDashboard() {
     }
   };
 
+  // Schedule configuration state
+  const toDatetimeLocal = (isoStr) => {
+    if (!isoStr) return '';
+    const clean = isoStr.split('+')[0].split('Z')[0];
+    return clean.slice(0, 16);
+  };
+
+  const toISTIso = (localStr) => {
+    if (!localStr) return '';
+    if (localStr.includes('+')) return localStr;
+    return localStr.length === 16 ? `${localStr}:00+05:30` : `${localStr}+05:30`;
+  };
+
+  const [schedStartDate, setSchedStartDate] = useState('2026-08-12T09:00');
+  const [schedEndDate, setSchedEndDate] = useState('2026-08-18T09:00');
+  const [schedStatus, setSchedStatus] = useState(null);
+  const [schedLoading, setSchedLoading] = useState(false);
+
+  const handleSaveSchedule = async (e) => {
+    if (e) e.preventDefault();
+    if (!schedStartDate || !schedEndDate) {
+      setSchedStatus({ type: 'error', message: 'Please specify both start date/time and end date/time.' });
+      return;
+    }
+    const startMs = new Date(toISTIso(schedStartDate)).getTime();
+    const endMs = new Date(toISTIso(schedEndDate)).getTime();
+    if (isNaN(startMs) || isNaN(endMs)) {
+      setSchedStatus({ type: 'error', message: 'Invalid date/time format.' });
+      return;
+    }
+    if (endMs <= startMs) {
+      setSchedStatus({ type: 'error', message: 'Event end date must be strictly after the start date.' });
+      return;
+    }
+
+    setSchedLoading(true);
+    setSchedStatus(null);
+    try {
+      const res = await fetch('/api/admin/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          event_start_date: toISTIso(schedStartDate),
+          event_end_date: toISTIso(schedEndDate)
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSchedStatus({ type: 'success', message: 'Event schedule successfully updated!' });
+        fetchConfig();
+      } else {
+        setSchedStatus({ type: 'error', message: data.error || 'Failed to update schedule' });
+      }
+    } catch (err) {
+      setSchedStatus({ type: 'error', message: 'Network error: ' + err.message });
+    } finally {
+      setSchedLoading(false);
+    }
+  };
+
   const fetchAlumni = async () => {
     try {
       const q = searchQuery ? `?q=${encodeURIComponent(searchQuery)}` : '';
@@ -216,7 +277,14 @@ export default function AdminDashboard() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
-      setConfig(data.config || {});
+      const cfg = data.config || {};
+      setConfig(cfg);
+      if (cfg.event_start_date) {
+        setSchedStartDate(toDatetimeLocal(cfg.event_start_date));
+      }
+      if (cfg.event_end_date) {
+        setSchedEndDate(toDatetimeLocal(cfg.event_end_date));
+      }
     } catch (e) {}
   };
 
@@ -2177,12 +2245,105 @@ export default function AdminDashboard() {
               </div>
 
               <div className="border-t theme-border pt-3">
-                <label className="block theme-text-secondary mb-1">&gt; EVENT WINDOW: 11TH AUG 2026 – 17TH AUG 2026</label>
+                <label className="block theme-text-secondary mb-1">&gt; EVENT WINDOW: 12TH AUG 2026 (9:00 AM) – 18TH AUG 2026 (9:00 AM)</label>
                 <p className="theme-text-muted text-[11px] leading-relaxed">
-                  Official 7-day competition schedule. Sliding-window rate limit (5 attempts / 60s) active with sub-millisecond tie breaking. Leaderboard cached in-memory.
+                  Official competition schedule. Sliding-window rate limit (5 attempts / 60s) active with sub-millisecond tie breaking. Leaderboard cached in-memory.
                 </p>
               </div>
             </div>
+          </div>
+
+          {/* Event Window & Schedule Controls */}
+          <div className="theme-bg-card border theme-border p-6 rounded-2xl shadow-sm space-y-5">
+            <div className="flex items-center space-x-2">
+              <Calendar className="w-5 h-5 text-amber-500" />
+              <h3 className="font-bold text-base theme-text-primary font-mono uppercase tracking-wider">
+                Event Schedule &amp; Time-Gating Controls
+              </h3>
+            </div>
+            <p className="text-xs theme-text-muted font-mono leading-relaxed">
+              Define the exact start and end date/times for the event. Before the start time, non-admin participants are locked out with a pre-launch briefing and live countdown gate. After the end time, all sessions, submissions, and hint unlocks are hard closed.
+            </p>
+
+            <form onSubmit={handleSaveSchedule} className="space-y-4 font-mono text-xs">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-4 rounded-xl theme-bg-surface border theme-border space-y-2">
+                  <label className="block text-cyan-400 font-bold uppercase">
+                    &gt; EVENT START DATE &amp; TIME (IST)
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={schedStartDate}
+                    onChange={(e) => setSchedStartDate(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl theme-bg-card border theme-border theme-text-primary font-mono text-xs focus:ring-2 focus:ring-cyan-500 focus:outline-none"
+                    required
+                  />
+                  <p className="text-[10px] theme-text-muted">
+                    Current Start: <span className="font-bold theme-text-primary">{config.event_start_date || '2026-08-12T09:00:00+05:30'}</span>
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-xl theme-bg-surface border theme-border space-y-2">
+                  <label className="block text-amber-400 font-bold uppercase">
+                    &gt; EVENT END DATE &amp; TIME (IST)
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={schedEndDate}
+                    onChange={(e) => setSchedEndDate(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl theme-bg-card border theme-border theme-text-primary font-mono text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    required
+                  />
+                  <p className="text-[10px] theme-text-muted">
+                    Current End: <span className="font-bold theme-text-primary">{config.event_end_date || '2026-08-18T09:00:00+05:30'}</span>
+                  </p>
+                </div>
+              </div>
+
+              {schedStatus && (
+                <div className={`p-3 rounded-xl text-xs font-mono flex items-center space-x-2 ${
+                  schedStatus.type === 'success'
+                    ? 'bg-emerald-500/15 border border-emerald-500/40 text-emerald-300'
+                    : 'bg-rose-500/15 border border-rose-500/40 text-rose-300'
+                }`}>
+                  {schedStatus.type === 'success' ? <CheckCircle className="w-4 h-4 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 flex-shrink-0" />}
+                  <span>{schedStatus.message}</span>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSchedStartDate('2026-08-12T09:00');
+                      setSchedEndDate('2026-08-18T09:00');
+                    }}
+                    className="px-3 py-1.5 rounded-lg border theme-border text-[11px] theme-text-secondary hover:theme-text-primary theme-bg-surface transition-all cursor-pointer"
+                  >
+                    Preset: 12th Aug 9am – 18th Aug 9am (Default)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nowIso = new Date().toISOString().slice(0, 16);
+                      setSchedStartDate(nowIso);
+                    }}
+                    className="px-3 py-1.5 rounded-lg border border-cyan-500/40 text-[11px] text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 transition-all cursor-pointer"
+                  >
+                    Start Now (Immediate Live)
+                  </button>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={schedLoading}
+                  className="px-6 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-mono font-bold text-xs uppercase tracking-wider transition-all cursor-pointer shadow-[0_0_20px_rgba(0,240,255,0.3)] disabled:opacity-50"
+                >
+                  {schedLoading ? 'SAVING SCHEDULE...' : '[ UPDATE EVENT SCHEDULE ]'}
+                </button>
+              </div>
+            </form>
           </div>
 
           {/* Timed Session & Countdown Configuration */}
@@ -2194,7 +2355,7 @@ export default function AdminDashboard() {
               </h3>
             </div>
             <p className="text-xs theme-text-muted font-mono">
-              Participants receive a single timed session during the 7-day competition window (11th Aug – 17th Aug 2026). Once initiated on their desktop/laptop, the server counts down continuously regardless of closing the tab or reloading.
+              Participants receive a single timed session during the competition window (12th Aug – 18th Aug 2026). Once initiated on their desktop/laptop, the server counts down continuously regardless of closing the tab or reloading.
             </p>
 
             <div className="space-y-3 pt-2 font-mono text-xs">

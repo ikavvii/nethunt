@@ -642,7 +642,16 @@ adminRouter.get('/config', async (req, res) => {
 });
 
 adminRouter.post('/config', async (req, res) => {
-  const { event_status, path_length, event_end_time, new_admin_key, leaderboard_visible, test_duration_minutes } = req.body;
+  const { 
+    event_status, 
+    path_length, 
+    event_end_time, 
+    new_admin_key, 
+    leaderboard_visible, 
+    test_duration_minutes,
+    event_start_date,
+    event_end_date
+  } = req.body;
   const setConfig = db.prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)');
 
   if (event_status) {
@@ -658,7 +667,18 @@ adminRouter.post('/config', async (req, res) => {
   }
   if (path_length) await setConfig.run('path_length', String(path_length));
   if (test_duration_minutes) await setConfig.run('test_duration_minutes', String(test_duration_minutes));
-  if (event_end_time) await setConfig.run('event_end_time', String(event_end_time));
+  if (event_start_date) await setConfig.run('event_start_date', String(event_start_date));
+  if (event_end_date) {
+    await setConfig.run('event_end_date', String(event_end_date));
+    try {
+      const endMs = new Date(event_end_date).getTime();
+      if (!isNaN(endMs)) {
+        await setConfig.run('event_end_time', String(endMs));
+      }
+    } catch (e) {}
+  } else if (event_end_time) {
+    await setConfig.run('event_end_time', String(event_end_time));
+  }
   if (new_admin_key && typeof new_admin_key === 'string' && new_admin_key.trim().length >= 6) {
     const cleanKey = new_admin_key.trim();
     await setConfig.run('admin_key', cleanKey);
