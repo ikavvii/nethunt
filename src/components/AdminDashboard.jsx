@@ -1353,7 +1353,15 @@ export default function AdminDashboard() {
                       </h3>
                     </div>
                     <p className="text-xs theme-text-muted mt-1">
-                      Directly copy-paste rows from Google Sheets or Excel with columns:
+                      Directly copy-paste rows from Google Sheets or Excel (e.g. exported from{' '}
+                      <a 
+                        href="https://login.psgtech.ac.in/alumni" 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="text-cyan-400 hover:underline font-bold"
+                      >
+                        login.psgtech.ac.in/alumni ↗
+                      </a>) with columns:
                     </p>
                     <code className="text-[11px] text-cyan-400 font-mono font-bold block mt-1">
                       NAME	EMAIL	PHONE	BATCH	ORGANIZATION

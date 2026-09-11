@@ -25,7 +25,11 @@ authRouter.post('/login', async (req, res) => {
   `).get(cleanIdentifier, cleanIdentifier, username.trim(), digitsOnly);
 
   if (!user) {
-    return res.status(401).json({ error: 'Alumni record not found. Please verify your registered email or mobile number.' });
+    return res.status(401).json({ 
+      error: 'Alumni record not found. Please register at https://login.psgtech.ac.in/alumni or verify your registered email or mobile number.',
+      notRegistered: true,
+      registerUrl: 'https://login.psgtech.ac.in/alumni'
+    });
   }
 
   // If user has already changed password, only their new personal password is valid.
@@ -207,7 +211,9 @@ authRouter.post('/recover-passkey', async (req, res) => {
 
   if (!user) {
     return res.status(404).json({ 
-      error: 'No alumni record found matching both that Email and Mobile number. Please double-check the registration details provided to the organizing team.' 
+      error: 'No alumni record found matching both that Email and Mobile number. If you have not registered yet, please register at https://login.psgtech.ac.in/alumni.',
+      notRegistered: true,
+      registerUrl: 'https://login.psgtech.ac.in/alumni'
     });
   }
 

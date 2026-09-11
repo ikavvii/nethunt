@@ -75,7 +75,13 @@ export function AuthProvider({ children }) {
       body: JSON.stringify({ username, passkey })
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Authentication failed');
+    if (!res.ok) {
+      const err = new Error(data.error || 'Authentication failed');
+      err.data = data;
+      err.notRegistered = Boolean(data.notRegistered);
+      err.registerUrl = data.registerUrl;
+      throw err;
+    }
     localStorage.setItem('nethunt_alumni_token', data.token);
     setToken(data.token);
     setUser(data.user);

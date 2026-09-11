@@ -353,6 +353,30 @@ async function runRigorousTests() {
     }).then(r => r.json());
     assert(adminResetPasskey.success && adminResetPasskey.passkey === '9876543200', 'PASSKEY: Admin 1-click reset passkey to phone number executed');
 
+    // 12G: Unregistered Alumnus Login guides to official alumni registration portal
+    const unregLoginRes = await fetch(`${BASE}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'nonexistent.alum@psgtech.ac.in', passkey: 'randompass123' })
+    });
+    const unregLoginData = await unregLoginRes.json();
+    assert(unregLoginRes.status === 401, 'ALUMNI GUIDANCE: Unregistered login blocked with HTTP 401');
+    assert(unregLoginData.notRegistered === true, 'ALUMNI GUIDANCE: Unregistered login flags notRegistered = true');
+    assert(unregLoginData.registerUrl === 'https://login.psgtech.ac.in/alumni', 'ALUMNI GUIDANCE: Unregistered login returns registerUrl');
+    assert(unregLoginData.error.includes('https://login.psgtech.ac.in/alumni'), 'ALUMNI GUIDANCE: Unregistered login error explicitly directs to https://login.psgtech.ac.in/alumni');
+
+    // 12H: Unregistered Alumnus Recovery guides to registration portal
+    const unregRecoverRes = await fetch(`${BASE}/api/auth/recover-passkey`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'nonexistent.alum@psgtech.ac.in', phone: '9998887776' })
+    });
+    const unregRecoverData = await unregRecoverRes.json();
+    assert(unregRecoverRes.status === 404, 'ALUMNI GUIDANCE: Unregistered recovery returns HTTP 404');
+    assert(unregRecoverData.notRegistered === true, 'ALUMNI GUIDANCE: Unregistered recovery flags notRegistered = true');
+    assert(unregRecoverData.registerUrl === 'https://login.psgtech.ac.in/alumni', 'ALUMNI GUIDANCE: Unregistered recovery returns registerUrl');
+    assert(unregRecoverData.error.includes('https://login.psgtech.ac.in/alumni'), 'ALUMNI GUIDANCE: Unregistered recovery error guides to https://login.psgtech.ac.in/alumni');
+
     // 13. Verify Duplicate Alumnus Prevention & Hardening
     console.log('\n--- Verifying Duplicate Alumnus Prevention & Hardening ---');
 

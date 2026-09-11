@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { X, LogIn, Shield, AlertCircle, CheckCircle } from 'lucide-react';
+import { X, LogIn, Shield, AlertCircle, CheckCircle, ExternalLink } from 'lucide-react';
 
 export default function AuthModal({ isOpen, onClose }) {
   const { login, adminLogin } = useAuth();
@@ -12,6 +12,7 @@ export default function AuthModal({ isOpen, onClose }) {
   const [recoverPhone, setRecoverPhone] = useState('');
   const [recoverySuccess, setRecoverySuccess] = useState(null);
   const [error, setError] = useState(null);
+  const [notRegistered, setNotRegistered] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // Clear modal form and status messages whenever modal is opened
@@ -24,6 +25,7 @@ export default function AuthModal({ isOpen, onClose }) {
       setRecoverPhone('');
       setRecoverySuccess(null);
       setError(null);
+      setNotRegistered(false);
       setLoading(false);
       setTab('alumni');
     }
@@ -34,6 +36,7 @@ export default function AuthModal({ isOpen, onClose }) {
   const handleRecoverPasskey = async (e) => {
     e.preventDefault();
     setError(null);
+    setNotRegistered(false);
     setRecoverySuccess(null);
     setLoading(true);
 
@@ -49,11 +52,14 @@ export default function AuthModal({ isOpen, onClose }) {
         setUsername(recoverPhone || recoverEmail);
         setPasskey(data.passkey);
         setTab('alumni');
+        setNotRegistered(false);
       } else {
         setError(data.error || 'Failed to recover passkey');
+        setNotRegistered(Boolean(data.notRegistered || (data.error && (data.error.includes('not found') || data.error.includes('login.psgtech.ac.in/alumni')))));
       }
     } catch (err) {
       setError('Network error during passkey recovery: ' + err.message);
+      setNotRegistered(false);
     } finally {
       setLoading(false);
     }
@@ -62,6 +68,7 @@ export default function AuthModal({ isOpen, onClose }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
+    setNotRegistered(false);
     setLoading(true);
 
     try {
@@ -74,6 +81,10 @@ export default function AuthModal({ isOpen, onClose }) {
       }
     } catch (err) {
       setError(err.message || 'Verification failed. Contact organizers for access.');
+      setNotRegistered(Boolean(
+        err.notRegistered || 
+        (err.message && (err.message.includes('not found') || err.message.includes('login.psgtech.ac.in/alumni')))
+      ));
     } finally {
       setLoading(false);
     }
@@ -115,7 +126,7 @@ export default function AuthModal({ isOpen, onClose }) {
         <div className="flex theme-bg-surface p-1 rounded-xl border theme-border mb-5 text-xs sm:text-sm font-mono">
           <button
             type="button"
-            onClick={() => { setTab('alumni'); setError(null); }}
+            onClick={() => { setTab('alumni'); setError(null); setNotRegistered(false); }}
             className={`flex-1 py-2.5 rounded-lg font-bold transition-all cursor-pointer ${
               tab === 'alumni' 
                 ? 'bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 border border-cyan-500/50 shadow-sm' 
@@ -126,7 +137,7 @@ export default function AuthModal({ isOpen, onClose }) {
           </button>
           <button
             type="button"
-            onClick={() => { setTab('admin'); setError(null); }}
+            onClick={() => { setTab('admin'); setError(null); setNotRegistered(false); }}
             className={`flex-1 py-2.5 rounded-lg font-bold transition-all cursor-pointer ${
               tab === 'admin' 
                 ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/50 shadow-sm' 
@@ -145,13 +156,41 @@ export default function AuthModal({ isOpen, onClose }) {
           </div>
         )}
 
-        {/* Error alert */}
-        {error && (
+        {/* Not Found / Registration Guidance Card */}
+        {notRegistered ? (
+          <div className="p-4 rounded-xl bg-amber-500/15 border-2 border-amber-500/40 text-xs sm:text-sm font-mono mb-4 space-y-3 shadow-md">
+            <div className="flex items-start space-x-2.5">
+              <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-amber-700 dark:text-amber-300 uppercase tracking-wide">
+                  Alumni Record Not Found
+                </p>
+                <p className="mt-1 text-xs theme-text-secondary leading-relaxed">
+                  Your credentials were not found in the NetHunt roster. If you are an MCA alumnus and haven't registered for LOGIN 2026 yet, please register on the official alumni portal:
+                </p>
+              </div>
+            </div>
+
+            <a
+              href="https://login.psgtech.ac.in/alumni"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center space-x-2 w-full py-3 px-4 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-mono font-black text-xs sm:text-sm uppercase tracking-wider shadow-md transition-all cursor-pointer group"
+            >
+              <span>Register at login.psgtech.ac.in/alumni</span>
+              <ExternalLink className="w-4 h-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+            </a>
+
+            <p className="text-[11px] theme-text-muted leading-tight">
+              * Once registered, your record will be synchronized by the organizing team and you can sign in using your registered mobile number.
+            </p>
+          </div>
+        ) : error ? (
           <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/40 text-rose-500 dark:text-rose-400 text-xs sm:text-sm font-mono flex items-center space-x-2 mb-4">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
             <span>{error}</span>
           </div>
-        )}
+        ) : null}
 
         {/* Recovery Form Mode */}
         {tab === 'recover' ? (
@@ -206,11 +245,26 @@ export default function AuthModal({ isOpen, onClose }) {
 
             <button
               type="button"
-              onClick={() => { setTab('alumni'); setError(null); }}
+              onClick={() => { setTab('alumni'); setError(null); setNotRegistered(false); }}
               className="w-full text-center text-xs sm:text-sm font-mono theme-text-muted hover:text-cyan-500 pt-2 cursor-pointer font-bold"
             >
               ← Back to Sign In
             </button>
+
+            <div className="pt-2 text-center border-t theme-border mt-2">
+              <p className="text-xs font-mono theme-text-muted">
+                Need to register your alumni profile?{' '}
+                <a
+                  href="https://login.psgtech.ac.in/alumni"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-cyan-600 dark:text-cyan-400 font-bold hover:underline inline-flex items-center space-x-1"
+                >
+                  <span>Register here</span>
+                  <ExternalLink className="w-3.5 h-3.5 inline ml-0.5" />
+                </a>
+              </p>
+            </div>
           </form>
         ) : (
           /* Standard Login Form */
@@ -240,7 +294,7 @@ export default function AuthModal({ isOpen, onClose }) {
                     </label>
                     <button
                       type="button"
-                      onClick={() => { setTab('recover'); setError(null); }}
+                      onClick={() => { setTab('recover'); setError(null); setNotRegistered(false); }}
                       className="text-xs font-mono theme-label-cyan hover:underline cursor-pointer font-bold"
                     >
                       Forgot Password?
@@ -260,6 +314,21 @@ export default function AuthModal({ isOpen, onClose }) {
                 <p className="text-xs theme-text-muted font-mono leading-relaxed">
                   * Registered alumni: Log in with your <span className="text-cyan-600 dark:text-cyan-400 font-bold">Email</span> or <span className="text-cyan-600 dark:text-cyan-400 font-bold">Mobile Number</span>. Default password is your <span className="text-cyan-600 dark:text-cyan-400 font-bold">Phone Number</span>. You will be prompted to set a personal password upon first login.
                 </p>
+
+                <div className="pt-3 text-center border-t theme-border mt-2">
+                  <p className="text-xs font-mono theme-text-muted">
+                    Not registered yet for LOGIN 2026?{' '}
+                    <a
+                      href="https://login.psgtech.ac.in/alumni"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-cyan-600 dark:text-cyan-400 font-bold hover:underline inline-flex items-center space-x-1"
+                    >
+                      <span>Register at login.psgtech.ac.in/alumni</span>
+                      <ExternalLink className="w-3.5 h-3.5 inline ml-0.5" />
+                    </a>
+                  </p>
+                </div>
               </>
             ) : (
               <div>

@@ -21,7 +21,8 @@ import {
   ShieldAlert,
   ShieldCheck,
   AlertOctagon,
-  X
+  X,
+  ExternalLink
 } from 'lucide-react';
 import { useProctorGuard } from '../utils/useProctorGuard';
 import { useDeviceGuard } from '../utils/deviceGuard';
@@ -408,6 +409,22 @@ export default function HuntArena({ onOpenAuth, onNavigateToLeaderboard }) {
           <span>[ INITIALIZE_SESSION // ENTER_PASSKEY ]</span>
           <ArrowRight className="w-5 h-5 stroke-[2.5]" />
         </button>
+
+        {/* Guidance for Unregistered Alumni */}
+        <div className="mt-8 p-4 max-w-lg mx-auto rounded-2xl bg-cyan-950/20 border border-cyan-500/30">
+          <p className="text-xs sm:text-sm font-mono theme-text-secondary">
+            Alumni not found or not yet registered?
+          </p>
+          <a
+            href="https://login.psgtech.ac.in/alumni"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center space-x-1.5 text-cyan-600 dark:text-cyan-400 font-bold hover:underline font-mono text-xs sm:text-sm mt-1.5"
+          >
+            <span>Register your profile at login.psgtech.ac.in/alumni</span>
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        </div>
       </div>
     );
   }
