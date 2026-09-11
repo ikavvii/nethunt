@@ -8,6 +8,29 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [eventStatus, setEventStatus] = useState('active');
   const [leaderboardVisible, setLeaderboardVisible] = useState(true);
+  const [eventStartDate, setEventStartDate] = useState('2026-09-12T09:00:00+05:30');
+  const [eventEndDate, setEventEndDate] = useState('2026-09-18T09:00:00+05:30');
+  const [eventWindow, setEventWindow] = useState('12 Sep 2026 (09:00 AM) – 18 Sep 2026 (09:00 AM)');
+  const [isBeforeStart, setIsBeforeStart] = useState(false);
+  const [isAfterEnd, setIsAfterEnd] = useState(false);
+  const [timeUntilStartSeconds, setTimeUntilStartSeconds] = useState(0);
+  const [timeUntilEndSeconds, setTimeUntilEndSeconds] = useState(0);
+
+  const refreshEventStatus = async () => {
+    try {
+      const res = await fetch('/api/events/status');
+      const d = await res.json();
+      if (d?.status) setEventStatus(d.status);
+      if (d?.leaderboardVisible !== undefined) setLeaderboardVisible(Boolean(d.leaderboardVisible));
+      if (d?.eventStartDate) setEventStartDate(d.eventStartDate);
+      if (d?.eventEndDate) setEventEndDate(d.eventEndDate);
+      if (d?.eventWindow) setEventWindow(d.eventWindow);
+      if (d?.isBeforeStart !== undefined) setIsBeforeStart(Boolean(d.isBeforeStart));
+      if (d?.isAfterEnd !== undefined) setIsAfterEnd(Boolean(d.isAfterEnd));
+      if (d?.timeUntilStartSeconds !== undefined) setTimeUntilStartSeconds(d.timeUntilStartSeconds);
+      if (d?.timeUntilEndSeconds !== undefined) setTimeUntilEndSeconds(d.timeUntilEndSeconds);
+    } catch (e) {}
+  };
 
   const fetchProfile = async (authToken) => {
     if (!authToken) {
@@ -41,13 +64,7 @@ export function AuthProvider({ children }) {
 
   // Fetch initial event status and connect to SSE stream
   useEffect(() => {
-    fetch('/api/events/status')
-      .then(r => r.json())
-      .then(d => {
-        if (d?.status) setEventStatus(d.status);
-        if (d?.leaderboardVisible !== undefined) setLeaderboardVisible(Boolean(d.leaderboardVisible));
-      })
-      .catch(() => {});
+    refreshEventStatus();
 
     const eventSource = new EventSource('/api/events/stream');
 
@@ -59,6 +76,9 @@ export function AuthProvider({ children }) {
         }
         if (data.type === 'LEADERBOARD_VISIBILITY_CHANGED' && data.payload?.visible !== undefined) {
           setLeaderboardVisible(Boolean(data.payload.visible));
+        }
+        if (data.type === 'EVENT_SCHEDULE_CHANGED' || data.type === 'EVENT_CONFIG_CHANGED') {
+          refreshEventStatus();
         }
       } catch (err) {}
     };
@@ -138,7 +158,15 @@ export function AuthProvider({ children }) {
       eventStatus,
       setEventStatus,
       leaderboardVisible,
-      setLeaderboardVisible
+      setLeaderboardVisible,
+      eventStartDate,
+      eventEndDate,
+      eventWindow,
+      isBeforeStart,
+      isAfterEnd,
+      timeUntilStartSeconds,
+      timeUntilEndSeconds,
+      refreshEventStatus
     }}>
       {children}
     </AuthContext.Provider>

@@ -683,21 +683,21 @@ async function runRigorousTests() {
     const clearedUser = await db.prepare('SELECT tab_violations FROM users WHERE id = ?').get(loginB.user.id);
     assert(clearedUser.tab_violations === 0, 'ADMIN PROCTOR: Database confirms alumnus tab_violations is now 0');
 
-    console.log('\n--- Verifying Event Window (12-18 Aug) & Time-Gating Controls ---');
-    // 19A: Configure and verify official 12th Aug - 18th Aug 2026 event schedule
+    console.log('\n--- Verifying Event Window (12-18 Sep) & Time-Gating Controls ---');
+    // 19A: Configure and verify official 12th Sep - 18th Sep 2026 event schedule
     await fetch(`${BASE}/api/admin/config`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
       body: JSON.stringify({
-        event_start_date: '2026-08-12T09:00:00+05:30',
-        event_end_date: '2026-08-18T09:00:00+05:30'
+        event_start_date: '2026-09-12T09:00:00+05:30',
+        event_end_date: '2026-09-18T09:00:00+05:30'
       })
     });
 
     const evStatusRes = await fetch(`${BASE}/api/events/status`).then(r => r.json());
-    assert(evStatusRes.eventWindow === '12th Aug 2026 (09:00 AM) – 18th Aug 2026 (09:00 AM)', 'EVENT WINDOW: /api/events/status reports 12th Aug 2026 (09:00 AM) – 18th Aug 2026 (09:00 AM)');
-    assert(evStatusRes.eventStartDate === '2026-08-12T09:00:00+05:30', 'EVENT WINDOW: Start date is 2026-08-12T09:00:00+05:30');
-    assert(evStatusRes.eventEndDate === '2026-08-18T09:00:00+05:30', 'EVENT WINDOW: End date is 2026-08-18T09:00:00+05:30');
+    assert(evStatusRes.eventWindow === '12 Sep 2026 (09:00 AM) – 18 Sep 2026 (09:00 AM)', 'EVENT WINDOW: /api/events/status reports 12 Sep 2026 (09:00 AM) – 18 Sep 2026 (09:00 AM)');
+    assert(evStatusRes.eventStartDate === '2026-09-12T09:00:00+05:30', 'EVENT WINDOW: Start date is 2026-09-12T09:00:00+05:30');
+    assert(evStatusRes.eventEndDate === '2026-09-18T09:00:00+05:30', 'EVENT WINDOW: End date is 2026-09-18T09:00:00+05:30');
 
     // 19B: Mobile device blocking on current-node endpoint
     const mobileUA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1';
@@ -938,9 +938,9 @@ async function runRigorousTests() {
     await db.prepare("UPDATE users SET passkey = 'login2026admin' WHERE username = 'admin'").run();
     await db.prepare("UPDATE config SET value = 'active' WHERE key = 'event_status'").run();
     await db.prepare("UPDATE config SET value = 'true' WHERE key = 'leaderboard_visible'").run();
-    await db.prepare("UPDATE config SET value = '2026-08-12T09:00:00+05:30' WHERE key = 'event_start_date'").run();
-    await db.prepare("UPDATE config SET value = '2026-08-18T09:00:00+05:30' WHERE key = 'event_end_date'").run();
-    await db.prepare("UPDATE config SET value = ? WHERE key = 'event_end_time'").run(String(new Date('2026-08-18T09:00:00+05:30').getTime()));
+    await db.prepare("UPDATE config SET value = '2026-09-12T09:00:00+05:30' WHERE key = 'event_start_date'").run();
+    await db.prepare("UPDATE config SET value = '2026-09-18T09:00:00+05:30' WHERE key = 'event_end_date'").run();
+    await db.prepare("UPDATE config SET value = ? WHERE key = 'event_end_time'").run(String(new Date('2026-09-18T09:00:00+05:30').getTime()));
 
     console.log('\n================================================================');
     console.log(`  ALL CRITICAL OBJECTIVES VERIFIED: ${passed} PASSED, ${failed} FAILED`);

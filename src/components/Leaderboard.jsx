@@ -149,23 +149,23 @@ export default function Leaderboard() {
               />
             </div>
 
-            <div className="flex items-center space-x-2.5">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
               {/* On-Demand Batch Standings Modal Button */}
               <button
                 onClick={() => setShowBatchModal(true)}
-                className="px-4 py-3 rounded-xl border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-xs sm:text-sm font-mono font-bold flex items-center space-x-2 transition-all cursor-pointer shadow-sm text-amber-600 dark:text-amber-400 whitespace-nowrap"
+                className="w-full sm:w-auto px-4 py-3 rounded-xl border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-xs sm:text-sm font-mono font-bold flex items-center justify-center space-x-2 transition-all cursor-pointer shadow-sm text-amber-600 dark:text-amber-400 whitespace-nowrap"
                 title="Open batch-wise standing cards and pooled scores"
               >
-                <Layers className="w-4 h-4 text-amber-500" />
+                <Layers className="w-4 h-4 text-amber-500 flex-shrink-0" />
                 <span>[ BATCH STANDINGS ({batches.length}) ]</span>
               </button>
 
-              <div className="flex items-center space-x-2">
-                <Filter className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
+              <div className="flex items-center space-x-2 w-full sm:w-auto">
+                <Filter className="w-5 h-5 text-cyan-600 dark:text-cyan-400 flex-shrink-0" />
                 <select
                   value={batchFilter}
                   onChange={(e) => setBatchFilter(e.target.value)}
-                  className="px-4 py-3 rounded-xl theme-bg-surface border theme-border theme-text-primary text-sm focus:outline-none focus:border-cyan-400 font-mono shadow-inner cursor-pointer font-bold"
+                  className="w-full sm:w-auto px-4 py-3 rounded-xl theme-bg-surface border theme-border theme-text-primary text-sm focus:outline-none focus:border-cyan-400 font-mono shadow-inner cursor-pointer font-bold"
                 >
                   <option value="ALL">ALL BATCHES</option>
                   {uniqueBatches.map(b => (

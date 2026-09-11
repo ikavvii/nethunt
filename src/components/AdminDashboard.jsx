@@ -41,6 +41,7 @@ import {
   ShieldCheck,
   Calendar
 } from 'lucide-react';
+import { formatEventWindow, formatSimpleDateRange } from '../utils/dateUtils';
 
 export default function AdminDashboard() {
   const { token, user } = useAuth();
@@ -155,8 +156,8 @@ export default function AdminDashboard() {
     return localStr.length === 16 ? `${localStr}:00+05:30` : `${localStr}+05:30`;
   };
 
-  const [schedStartDate, setSchedStartDate] = useState('2026-08-12T09:00');
-  const [schedEndDate, setSchedEndDate] = useState('2026-08-18T09:00');
+  const [schedStartDate, setSchedStartDate] = useState('2026-09-12T09:00');
+  const [schedEndDate, setSchedEndDate] = useState('2026-09-18T09:00');
   const [schedStatus, setSchedStatus] = useState(null);
   const [schedLoading, setSchedLoading] = useState(false);
 
@@ -2245,7 +2246,7 @@ export default function AdminDashboard() {
               </div>
 
               <div className="border-t theme-border pt-3">
-                <label className="block theme-text-secondary mb-1">&gt; EVENT WINDOW: 12TH AUG 2026 (9:00 AM) – 18TH AUG 2026 (9:00 AM)</label>
+                <label className="block theme-text-secondary mb-1">&gt; EVENT WINDOW: {formatEventWindow(config.event_start_date, config.event_end_date)}</label>
                 <p className="theme-text-muted text-[11px] leading-relaxed">
                   Official competition schedule. Sliding-window rate limit (5 attempts / 60s) active with sub-millisecond tie breaking. Leaderboard cached in-memory.
                 </p>
@@ -2279,7 +2280,7 @@ export default function AdminDashboard() {
                     required
                   />
                   <p className="text-[10px] theme-text-muted">
-                    Current Start: <span className="font-bold theme-text-primary">{config.event_start_date || '2026-08-12T09:00:00+05:30'}</span>
+                    Current Start: <span className="font-bold theme-text-primary">{config.event_start_date || '2026-09-12T09:00:00+05:30'}</span>
                   </p>
                 </div>
 
@@ -2295,7 +2296,7 @@ export default function AdminDashboard() {
                     required
                   />
                   <p className="text-[10px] theme-text-muted">
-                    Current End: <span className="font-bold theme-text-primary">{config.event_end_date || '2026-08-18T09:00:00+05:30'}</span>
+                    Current End: <span className="font-bold theme-text-primary">{config.event_end_date || '2026-09-18T09:00:00+05:30'}</span>
                   </p>
                 </div>
               </div>
@@ -2316,12 +2317,12 @@ export default function AdminDashboard() {
                   <button
                     type="button"
                     onClick={() => {
-                      setSchedStartDate('2026-08-12T09:00');
-                      setSchedEndDate('2026-08-18T09:00');
+                      setSchedStartDate('2026-09-12T09:00');
+                      setSchedEndDate('2026-09-18T09:00');
                     }}
                     className="px-3 py-1.5 rounded-lg border theme-border text-[11px] theme-text-secondary hover:theme-text-primary theme-bg-surface transition-all cursor-pointer"
                   >
-                    Preset: 12th Aug 9am – 18th Aug 9am (Default)
+                    Preset: 12th Sep 9am – 18th Sep 9am (Default)
                   </button>
                   <button
                     type="button"
@@ -2355,7 +2356,7 @@ export default function AdminDashboard() {
               </h3>
             </div>
             <p className="text-xs theme-text-muted font-mono">
-              Participants receive a single timed session during the competition window (12th Aug – 18th Aug 2026). Once initiated on their desktop/laptop, the server counts down continuously regardless of closing the tab or reloading.
+              Participants receive a single timed session during the competition window ({formatSimpleDateRange(config.event_start_date, config.event_end_date)}). Once initiated on their desktop/laptop, the server counts down continuously regardless of closing the tab or reloading.
             </p>
 
             <div className="space-y-3 pt-2 font-mono text-xs">

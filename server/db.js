@@ -284,18 +284,18 @@ async function seedSystem() {
   }
 
   const evStartDate = await getConfig.get('event_start_date');
-  if (!evStartDate || evStartDate.value.startsWith('2026-08-11')) {
-    await setConfig.run('event_start_date', '2026-08-12T09:00:00+05:30');
+  if (!evStartDate || evStartDate.value.includes('2026-08')) {
+    await setConfig.run('event_start_date', '2026-09-12T09:00:00+05:30');
   }
 
   const evEndDate = await getConfig.get('event_end_date');
-  if (!evEndDate || evEndDate.value.startsWith('2026-08-17')) {
-    await setConfig.run('event_end_date', '2026-08-18T09:00:00+05:30');
+  if (!evEndDate || evEndDate.value.includes('2026-08')) {
+    await setConfig.run('event_end_date', '2026-09-18T09:00:00+05:30');
   }
 
   const evEndTime = await getConfig.get('event_end_time');
-  if (!evEndTime || (evEndDate && evEndDate.value.startsWith('2026-08-17'))) {
-    await setConfig.run('event_end_time', String(new Date('2026-08-18T09:00:00+05:30').getTime()));
+  if (!evEndTime || (evEndDate && evEndDate.value.includes('2026-08'))) {
+    await setConfig.run('event_end_time', String(new Date('2026-09-18T09:00:00+05:30').getTime()));
   }
 
   const lbVisible = await getConfig.get('leaderboard_visible');

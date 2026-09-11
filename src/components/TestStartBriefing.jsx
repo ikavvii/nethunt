@@ -13,6 +13,7 @@ import {
   Calendar,
   Hourglass
 } from 'lucide-react';
+import { formatEventDateFull, formatSimpleDateRange } from '../utils/dateUtils';
 
 export default function TestStartBriefing({ 
   user, 
@@ -22,8 +23,8 @@ export default function TestStartBriefing({
   isBeforeEventStart = false,
   isAfterEventEnd = false,
   timeUntilStartSeconds = 0,
-  eventStartDate = '2026-08-12T09:00:00+05:30',
-  eventEndDate = '2026-08-18T09:00:00+05:30'
+  eventStartDate = '2026-09-12T09:00:00+05:30',
+  eventEndDate = '2026-09-18T09:00:00+05:30'
 }) {
   const [acknowledged, setAcknowledged] = useState(false);
   const [countdownSecs, setCountdownSecs] = useState(timeUntilStartSeconds || 0);
@@ -103,7 +104,7 @@ export default function TestStartBriefing({
                     // EVENT PRE-LAUNCH GATE ACTIVE //
                   </div>
                   <h3 className="text-base sm:text-lg font-mono font-bold text-white">
-                    NetHunt Opens on 12th Aug 2026 at 9:00 AM IST
+                    NetHunt Opens on {formatEventDateFull(eventStartDate)}
                   </h3>
                   <p className="text-xs font-mono text-amber-200/80 mt-0.5">
                     Test session initiation is locked until the countdown reaches zero.
@@ -142,7 +143,7 @@ export default function TestStartBriefing({
           <div className="p-6 rounded-2xl border-2 border-rose-500/40 bg-rose-950/30 text-slate-100 mb-8">
             <div className="flex items-center space-x-3 text-rose-400 font-mono font-bold">
               <AlertTriangle className="w-6 h-6 flex-shrink-0" />
-              <span>EVENT WINDOW CONCLUDED (ENDED 18TH AUG 2026, 9:00 AM IST)</span>
+              <span>EVENT WINDOW CONCLUDED (ENDED {formatEventDateFull(eventEndDate).toUpperCase()})</span>
             </div>
             <p className="text-xs font-mono text-slate-300 mt-2">
               The competition has officially concluded. Test sessions and submissions are closed.
@@ -164,14 +165,14 @@ export default function TestStartBriefing({
             </p>
           </div>
 
-          {/* Rule 2: 12th Aug - 18th Aug Window Availability */}
+          {/* Rule 2: Dynamic Window Availability */}
           <div className="p-4 rounded-2xl border border-cyan-500/30 bg-cyan-950/20 text-slate-200">
             <div className="flex items-center space-x-3 mb-2 text-cyan-400 font-mono font-bold text-sm">
               <Zap className="w-5 h-5 flex-shrink-0" />
               <span>2. COMPETITION WINDOW</span>
             </div>
             <p className="text-xs font-mono text-slate-300 leading-relaxed">
-              The event is open from <strong className="text-white">12th Aug (9:00 AM) to 18th Aug (9:00 AM) 2026</strong>. You may choose any convenient time to start your {durationText} attempt within this window.
+              The event is open during <strong className="text-white">{formatSimpleDateRange(eventStartDate, eventEndDate)}</strong>. You may choose any convenient time to start your {durationText} attempt within this window.
             </p>
           </div>
 
@@ -242,7 +243,7 @@ export default function TestStartBriefing({
           ) : isBeforeEventStart ? (
             <>
               <Lock className="w-5 h-5 stroke-[2.5] text-amber-400" />
-              <span>[ EVENT OPENS ON 12TH AUG 9:00 AM IST // COUNTDOWN ACTIVE ]</span>
+              <span>[ EVENT OPENS ON {formatEventDateFull(eventStartDate).toUpperCase()} // COUNTDOWN ACTIVE ]</span>
             </>
           ) : isAfterEventEnd ? (
             <>

@@ -39,11 +39,21 @@ function checkSlidingWindowRateLimit(userId) {
 
 function normalizeAnswer(str) {
   if (!str) return '';
-  return str
-    .toLowerCase()
-    .trim()
-    .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?'"]/g, '')
-    .replace(/\s+/g, ' ');
+  return str.toLowerCase().trim().replace(/[\s\-_]+/g, '');
+}
+
+function formatDateTimeIST(dateStr) {
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const pad = n => String(n).padStart(2, '0');
+    const hours = d.getHours() % 12 || 12;
+    const ampm = d.getHours() >= 12 ? 'PM' : 'AM';
+    return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()} at ${pad(hours)}:${pad(d.getMinutes())} ${ampm} IST`;
+  } catch (e) {
+    return dateStr;
+  }
 }
 
 function isMobileOrTabletUserAgent(ua) {
@@ -132,14 +142,14 @@ huntRouter.post('/start-test', requireAuth, async (req, res) => {
   }
 
   const now = Date.now();
-  const startDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_start_date'").get())?.value || '2026-08-12T09:00:00+05:30';
-  const endDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_end_date'").get())?.value || '2026-08-18T09:00:00+05:30';
+  const startDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_start_date'").get())?.value || '2026-09-12T09:00:00+05:30';
+  const endDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_end_date'").get())?.value || '2026-09-18T09:00:00+05:30';
 
   if (user.role !== 'admin') {
     const startMs = new Date(startDateStr).getTime();
     if (!isNaN(startMs) && now < startMs) {
       return res.status(403).json({
-        error: `Event has not started yet. The test opens on 12th Aug 2026 at 9:00 AM (09:00 AM IST).`,
+        error: `Event has not started yet. The test opens on ${formatDateTimeIST(startDateStr)}.`,
         notStartedYet: true,
         eventStartDate: startDateStr,
         timeUntilStartSeconds: Math.max(0, Math.floor((startMs - now) / 1000))
@@ -149,7 +159,7 @@ huntRouter.post('/start-test', requireAuth, async (req, res) => {
     const endMs = new Date(endDateStr).getTime();
     if (!isNaN(endMs) && now > endMs) {
       return res.status(403).json({
-        error: `Event window has closed. The competition concluded on 18th Aug 2026.`,
+        error: `Event window has closed. The competition concluded on ${formatDateTimeIST(endDateStr)}.`,
         eventEnded: true,
         eventEndDate: endDateStr
       });
@@ -204,8 +214,8 @@ huntRouter.get('/current-node', requireAuth, async (req, res) => {
   const totalSteps = path.length;
 
   const eventStatus = (await db.prepare("SELECT value FROM config WHERE key = 'event_status'").get())?.value || 'active';
-  const startDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_start_date'").get())?.value || '2026-08-12T09:00:00+05:30';
-  const endDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_end_date'").get())?.value || '2026-08-18T09:00:00+05:30';
+  const startDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_start_date'").get())?.value || '2026-09-12T09:00:00+05:30';
+  const endDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_end_date'").get())?.value || '2026-09-18T09:00:00+05:30';
   const now = Date.now();
   const startMs = new Date(startDateStr).getTime();
   const endMs = new Date(endDateStr).getTime();
@@ -335,14 +345,14 @@ huntRouter.post('/submit', requireAuth, async (req, res) => {
   }
 
   const now = Date.now();
-  const startDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_start_date'").get())?.value || '2026-08-12T09:00:00+05:30';
-  const endDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_end_date'").get())?.value || '2026-08-18T09:00:00+05:30';
+  const startDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_start_date'").get())?.value || '2026-09-12T09:00:00+05:30';
+  const endDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_end_date'").get())?.value || '2026-09-18T09:00:00+05:30';
 
   if (user.role !== 'admin') {
     const startMs = new Date(startDateStr).getTime();
     if (!isNaN(startMs) && now < startMs) {
       return res.status(403).json({
-        error: 'Event has not started yet. Submissions are not accepted yet.',
+        error: `Event has not started yet. Submissions open on ${formatDateTimeIST(startDateStr)}.`,
         notStartedYet: true,
         eventStartDate: startDateStr
       });
@@ -351,7 +361,7 @@ huntRouter.post('/submit', requireAuth, async (req, res) => {
     const endMs = new Date(endDateStr).getTime();
     if (!isNaN(endMs) && now > endMs) {
       return res.status(403).json({
-        error: 'Event window has closed. Submissions are closed.',
+        error: `Event window has closed. Submissions concluded on ${formatDateTimeIST(endDateStr)}.`,
         eventEnded: true,
         eventEndDate: endDateStr
       });
@@ -531,14 +541,14 @@ huntRouter.post('/unlock-hint', requireAuth, async (req, res) => {
   }
 
   const now = Date.now();
-  const startDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_start_date'").get())?.value || '2026-08-12T09:00:00+05:30';
-  const endDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_end_date'").get())?.value || '2026-08-18T09:00:00+05:30';
+  const startDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_start_date'").get())?.value || '2026-09-12T09:00:00+05:30';
+  const endDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_end_date'").get())?.value || '2026-09-18T09:00:00+05:30';
 
   if (user.role !== 'admin') {
     const startMs = new Date(startDateStr).getTime();
     if (!isNaN(startMs) && now < startMs) {
       return res.status(403).json({
-        error: 'Event has not started yet. Hint unlocks are not available yet.',
+        error: `Event has not started yet. Hint unlocks become available on ${formatDateTimeIST(startDateStr)}.`,
         notStartedYet: true,
         eventStartDate: startDateStr
       });
@@ -547,7 +557,7 @@ huntRouter.post('/unlock-hint', requireAuth, async (req, res) => {
     const endMs = new Date(endDateStr).getTime();
     if (!isNaN(endMs) && now > endMs) {
       return res.status(403).json({
-        error: 'Event window has closed. Hint unlocks are closed.',
+        error: `Event window has closed. Hint unlocks concluded on ${formatDateTimeIST(endDateStr)}.`,
         eventEnded: true,
         eventEndDate: endDateStr
       });

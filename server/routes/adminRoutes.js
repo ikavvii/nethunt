@@ -679,6 +679,10 @@ adminRouter.post('/config', async (req, res) => {
   } else if (event_end_time) {
     await setConfig.run('event_end_time', String(event_end_time));
   }
+
+  if (event_start_date || event_end_date) {
+    broadcastEvent('EVENT_SCHEDULE_CHANGED', { event_start_date, event_end_date });
+  }
   if (new_admin_key && typeof new_admin_key === 'string' && new_admin_key.trim().length >= 6) {
     const cleanKey = new_admin_key.trim();
     await setConfig.run('admin_key', cleanKey);

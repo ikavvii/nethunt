@@ -28,14 +28,31 @@ app.use(express.json());
 // Real-time Event Stream (Server-Sent Events)
 app.get('/api/events/stream', registerSSEClient);
 
+function formatEventWindow(startInput, endInput) {
+  try {
+    const s = new Date(startInput);
+    const e = new Date(endInput);
+    if (isNaN(s.getTime()) || isNaN(e.getTime())) return `${startInput} – ${endInput}`;
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const pad = (n) => String(n).padStart(2, '0');
+    const sHours = s.getHours() % 12 || 12;
+    const sAm = s.getHours() >= 12 ? 'PM' : 'AM';
+    const eHours = e.getHours() % 12 || 12;
+    const eAm = e.getHours() >= 12 ? 'PM' : 'AM';
+    return `${s.getDate()} ${months[s.getMonth()]} ${s.getFullYear()} (${pad(sHours)}:${pad(s.getMinutes())} ${sAm}) – ${e.getDate()} ${months[e.getMonth()]} ${e.getFullYear()} (${pad(eHours)}:${pad(e.getMinutes())} ${eAm})`;
+  } catch (err) {
+    return `${startInput} – ${endInput}`;
+  }
+}
+
 // Event Status Endpoint (Public)
 app.get('/api/events/status', async (req, res) => {
   try {
     const evStatus = (await db.prepare("SELECT value FROM config WHERE key = 'event_status'").get())?.value || 'active';
     const lbRow = await db.prepare("SELECT value FROM config WHERE key = 'leaderboard_visible'").get();
     const lbVisible = (!lbRow || lbRow.value === undefined || lbRow.value === null) ? true : (lbRow.value === 'true' || lbRow.value === '1');
-    const startDate = (await db.prepare("SELECT value FROM config WHERE key = 'event_start_date'").get())?.value || '2026-08-12T09:00:00+05:30';
-    const endDate = (await db.prepare("SELECT value FROM config WHERE key = 'event_end_date'").get())?.value || '2026-08-18T09:00:00+05:30';
+    const startDate = (await db.prepare("SELECT value FROM config WHERE key = 'event_start_date'").get())?.value || '2026-09-12T09:00:00+05:30';
+    const endDate = (await db.prepare("SELECT value FROM config WHERE key = 'event_end_date'").get())?.value || '2026-09-18T09:00:00+05:30';
     
     const now = Date.now();
     const startMs = new Date(startDate).getTime();
@@ -54,15 +71,15 @@ app.get('/api/events/status', async (req, res) => {
       isAfterEnd,
       timeUntilStartSeconds: isBeforeStart ? Math.max(0, Math.floor((startMs - now) / 1000)) : 0,
       timeUntilEndSeconds: !isAfterEnd ? Math.max(0, Math.floor((endMs - now) / 1000)) : 0,
-      eventWindow: '12th Aug 2026 (09:00 AM) – 18th Aug 2026 (09:00 AM)'
+      eventWindow: formatEventWindow(startDate, endDate)
     });
   } catch (e) {
     res.json({ 
       status: 'active', 
       leaderboardVisible: true,
-      eventStartDate: '2026-08-12T09:00:00+05:30',
-      eventEndDate: '2026-08-18T09:00:00+05:30',
-      eventWindow: '12th Aug 2026 (09:00 AM) – 18th Aug 2026 (09:00 AM)'
+      eventStartDate: '2026-09-12T09:00:00+05:30',
+      eventEndDate: '2026-09-18T09:00:00+05:30',
+      eventWindow: '12 Sep 2026 (09:00 AM) – 18 Sep 2026 (09:00 AM)'
     });
   }
 });

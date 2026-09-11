@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { formatShortEventWindow } from '../utils/dateUtils';
 import { 
   Sun, 
   Moon, 
@@ -12,71 +13,74 @@ import {
 } from 'lucide-react';
 
 export default function Navbar({ activeTab, setActiveTab, onOpenAuth }) {
-  const { user, logout, eventStatus, leaderboardVisible } = useAuth();
+  const { user, logout, eventStatus, leaderboardVisible, eventStartDate, eventEndDate } = useAuth();
   const { theme, setTheme, themes } = useTheme();
 
   const currentThemeObj = themes.find(t => t.id === theme) || themes[0];
+  const formattedSchedule = formatShortEventWindow(eventStartDate, eventEndDate);
 
   return (
     <header className="sticky top-0 z-40 theme-bg-card border-b theme-border shadow-sm transition-colors">
-      <div className="max-w-[1700px] mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
+      <div className="max-w-[1700px] mx-auto px-3 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-16 gap-2">
           
             {/* Logo / Crest */}
             <div 
               onClick={() => setActiveTab(user?.role === 'admin' ? 'admin' : 'hunt')}
-              className="flex items-center space-x-3 cursor-pointer select-none group"
+              className="flex items-center space-x-2.5 sm:space-x-3 cursor-pointer select-none group flex-shrink-0"
             >
               <div className="bg-white/95 p-1 rounded-lg border border-cyan-500/40 shadow-[0_0_12px_rgba(0,240,255,0.25)] flex items-center justify-center flex-shrink-0">
                 <img 
                   src="/psg_logo.png" 
                   alt="PSG College of Technology" 
-                  className="h-8 w-auto object-contain"
+                  className="h-7 sm:h-8 w-auto object-contain"
                 />
               </div>
               <div>
-                <div className="flex items-center space-x-2">
-                  <span className="font-mono font-black text-base sm:text-lg tracking-wider theme-text-primary">
+                <div className="flex items-center space-x-1.5 sm:space-x-2">
+                  <span className="font-mono font-black text-sm sm:text-base md:text-lg tracking-wider theme-text-primary">
                     LOGIN<span className="text-cyan-400 font-extrabold">//2026</span>
                   </span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded font-mono font-bold bg-cyan-950/80 text-cyan-300 border border-cyan-500/30">
+                  <span className="text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded font-mono font-bold bg-cyan-950/80 text-cyan-300 border border-cyan-500/30">
                     MCA_ALUMNI
                   </span>
                 </div>
-                <p className="text-[10px] theme-text-muted font-mono tracking-widest uppercase">
-                  PSG COLLEGE OF TECHNOLOGY • 12–18 AUG 2026
+                <p className="text-[9px] sm:text-[10px] theme-text-muted font-mono tracking-wider sm:tracking-widest uppercase truncate max-w-[180px] sm:max-w-none">
+                  <span className="hidden md:inline">PSG COLLEGE OF TECHNOLOGY • </span>{formattedSchedule}
                 </p>
               </div>
             </div>
 
             {/* Navigation Controls */}
-            <nav className="flex items-center space-x-1 sm:space-x-2.5">
+            <nav className="flex items-center space-x-1 sm:space-x-2">
               {user?.role !== 'admin' && (
                 <button
                   onClick={() => setActiveTab('hunt')}
-                  className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-sm font-mono font-bold transition-all ${
+                  className={`flex items-center space-x-1 sm:space-x-2 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-mono font-bold transition-all ${
                     activeTab === 'hunt'
                       ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/40 shadow-[0_0_12px_rgba(0,240,255,0.2)]'
                       : 'theme-text-secondary hover:text-cyan-400 hover:theme-bg-surface'
                   }`}
                 >
-                  <Compass className="w-4 h-4 text-cyan-400" />
-                  <span>[ HUNT_ARENA ]</span>
+                  <Compass className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400" />
+                  <span className="hidden sm:inline">[ HUNT_ARENA ]</span>
+                  <span className="sm:hidden">HUNT</span>
                 </button>
               )}
 
               <button
                 onClick={() => setActiveTab('standings')}
-                className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-sm font-mono font-bold transition-all ${
+                className={`flex items-center space-x-1 sm:space-x-2 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-mono font-bold transition-all ${
                   activeTab === 'standings'
                     ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/40 shadow-[0_0_12px_rgba(0,240,255,0.2)]'
                     : 'theme-text-secondary hover:text-cyan-400 hover:theme-bg-surface'
                 }`}
               >
-                <BarChart2 className="w-4 h-4 text-cyan-400" />
-                <span>[ STANDINGS ]</span>
+                <BarChart2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400" />
+                <span className="hidden sm:inline">[ STANDINGS ]</span>
+                <span className="sm:hidden">RANKS</span>
                 {!leaderboardVisible && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 hidden md:inline">
+                  <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 hidden md:inline">
                     FROZEN
                   </span>
                 )}
@@ -85,25 +89,25 @@ export default function Navbar({ activeTab, setActiveTab, onOpenAuth }) {
               {user?.role === 'admin' && (
                 <button
                   onClick={() => setActiveTab('admin')}
-                  className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-sm font-mono font-bold transition-all ${
+                  className={`flex items-center space-x-1 sm:space-x-2 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-mono font-bold transition-all ${
                     activeTab === 'admin'
                       ? 'bg-amber-500/15 text-amber-300 border border-amber-500/40 shadow-[0_0_12px_rgba(255,176,0,0.2)]'
                       : 'theme-text-secondary hover:text-amber-400 hover:theme-bg-surface'
                   }`}
                 >
-                  <Sliders className="w-4 h-4 text-amber-400" />
-                  <span>[ ADMIN_SYS ]</span>
+                  <Sliders className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
+                  <span className="hidden sm:inline">[ ADMIN_SYS ]</span>
                 </button>
               )}
 
               {eventStatus === 'paused' && (
-                <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-amber-500/15 text-amber-400 border border-amber-500/40 flex items-center space-x-1.5 shadow-sm ml-1">
+                <span className="px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg text-[10px] sm:text-xs font-mono font-bold bg-amber-500/15 text-amber-400 border border-amber-500/40 flex items-center space-x-1.5 shadow-sm ml-1">
                   <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
                   <span>PAUSED</span>
                 </span>
               )}
               {(eventStatus === 'ended' || eventStatus === 'stopped') && (
-                <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-rose-500/15 text-rose-400 border border-rose-500/40 flex items-center space-x-1.5 shadow-sm ml-1">
+                <span className="px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg text-[10px] sm:text-xs font-mono font-bold bg-rose-500/15 text-rose-400 border border-rose-500/40 flex items-center space-x-1.5 shadow-sm ml-1">
                   <span className="w-2 h-2 rounded-full bg-rose-400" />
                   <span>ENDED</span>
                 </span>
@@ -183,10 +187,11 @@ export default function Navbar({ activeTab, setActiveTab, onOpenAuth }) {
             ) : (
               <button
                 onClick={onOpenAuth}
-                className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-mono font-bold text-sm shadow-[0_0_15px_rgba(0,240,255,0.3)] transition-all uppercase tracking-wider cursor-pointer"
+                className="flex items-center space-x-1.5 sm:space-x-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-mono font-bold text-xs sm:text-sm shadow-[0_0_15px_rgba(0,240,255,0.3)] transition-all uppercase tracking-wider cursor-pointer flex-shrink-0"
               >
-                <LogIn className="w-4 h-4" />
-                <span>ACCESS_GATEWAY</span>
+                <LogIn className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span className="hidden sm:inline">ACCESS_GATEWAY</span>
+                <span className="sm:hidden font-black">SIGN IN</span>
               </button>
             )}
 
