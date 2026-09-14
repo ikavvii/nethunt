@@ -50,7 +50,7 @@ function MainLayout() {
             />
           )}
           {activeTab === 'standings' && (
-            <Leaderboard />
+            <Leaderboard onNavigateToHunt={() => setActiveTab('hunt')} />
           )}
           {activeTab === 'admin' && (
             <div className="admin-dashboard-container">

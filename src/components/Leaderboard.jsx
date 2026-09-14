@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Trophy, Search, Filter, RefreshCw, Award, Shield, Layers, X, EyeOff } from 'lucide-react';
+import { Trophy, Search, Filter, RefreshCw, Award, Shield, Layers, X, EyeOff, Sparkles, ArrowRight } from 'lucide-react';
 
-export default function Leaderboard() {
+export default function Leaderboard({ onNavigateToHunt }) {
   const { user, token, eventStatus, leaderboardVisible } = useAuth();
   const [leaderboard, setLeaderboard] = useState([]);
   const [batches, setBatches] = useState([]);
@@ -65,7 +65,7 @@ export default function Leaderboard() {
             </h1>
           </div>
           <p className="text-sm theme-text-muted mt-1 font-mono">
-            &gt; Live continuous rankings broken by aggregate score, node step, and sub-millisecond solve timestamp.
+            &gt; Live continuous rankings of active test participants, ranked by score, challenge step, and sub-millisecond solve timestamp.
           </p>
         </div>
 
@@ -135,6 +135,27 @@ export default function Leaderboard() {
             </div>
           )}
 
+          {/* Informational Banner for Enrolled Alumni Who Haven't Started Test */}
+          {user && user.role !== 'admin' && !leaderboard.some(u => u.id === user.id) && (
+            <div className="p-4 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono shadow-sm">
+              <div className="flex items-center space-x-2.5">
+                <Sparkles className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+                <span className="theme-text-primary leading-relaxed">
+                  Welcome, <strong>{user.name}</strong> ({user.batch})! You haven't started your test session yet. Once you click <strong>[Start Test]</strong> in the Hunt Arena, your live score and rank will appear on this board.
+                </span>
+              </div>
+              {onNavigateToHunt && (
+                <button
+                  onClick={onNavigateToHunt}
+                  className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold uppercase transition-all whitespace-nowrap cursor-pointer shadow-sm text-xs flex items-center justify-center space-x-1.5 flex-shrink-0"
+                >
+                  <span>[ START YOUR HUNT ]</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Filter Bar with On-Demand Batch Standings Trigger */}
           <div className="theme-bg-card border theme-border p-4 rounded-xl flex flex-col sm:flex-row gap-3 shadow-sm items-stretch sm:items-center">
             <div className="relative flex-1">
@@ -191,74 +212,84 @@ export default function Leaderboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y theme-border">
-                  {filtered.map((al) => {
-                    const isMe = user?.id === al.id;
-                    return (
-                      <tr 
-                        key={al.id} 
-                        className={`transition-colors ${
-                          isMe ? 'bg-cyan-500/10 border-l-2 border-cyan-500' : 'hover:theme-bg-surface'
-                        }`}
-                      >
-                        <td className="py-3.5 px-4 text-center font-bold">
-                          {al.rank === 1 ? (
-                            <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-500/20 text-amber-500 border border-amber-500/50 text-sm font-black shadow-sm">1</span>
-                          ) : al.rank === 2 ? (
-                            <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-400/20 text-slate-600 dark:text-slate-300 border border-slate-400/50 text-sm font-black">2</span>
-                          ) : al.rank === 3 ? (
-                            <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-700/20 text-amber-600 dark:text-amber-500 border border-amber-700/50 text-sm font-black">3</span>
-                          ) : (
-                            <span className="theme-text-muted text-sm font-mono font-bold">#{al.rank}</span>
-                          )}
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <div className="flex items-center space-x-3">
-                            <div 
-                              className="w-8 h-8 rounded-full bg-slate-800 border theme-border flex items-center justify-center text-xs font-bold theme-text-muted flex-shrink-0 font-mono"
-                            >
-                              {al.name ? al.name[0] : 'A'}
-                            </div>
-                            <div>
-                              <div className="flex items-center space-x-2">
-                                <span className={`text-sm sm:text-base font-bold ${isMe ? 'theme-label-cyan' : 'theme-text-primary'}`}>
-                                  {al.name}
-                                </span>
-                                {isMe && (
-                                  <span className="text-[11px] bg-cyan-500 text-slate-950 font-bold px-2 py-0.5 rounded font-mono shadow-sm">
-                                    YOU
-                                  </span>
-                                )}
+                  {filtered.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-12 text-center text-xs font-mono theme-text-muted">
+                        {search || batchFilter !== 'ALL'
+                          ? 'No active test participants match your filter criteria.'
+                          : 'No alumni have initiated their test sessions yet. Standings will populate dynamically as tests begin.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    filtered.map((al) => {
+                      const isMe = user?.id === al.id;
+                      return (
+                        <tr 
+                          key={al.id} 
+                          className={`transition-colors ${
+                            isMe ? 'bg-cyan-500/10 border-l-2 border-cyan-500' : 'hover:theme-bg-surface'
+                          }`}
+                        >
+                          <td className="py-3.5 px-4 text-center font-bold">
+                            {al.rank === 1 ? (
+                              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-500/20 text-amber-500 border border-amber-500/50 text-sm font-black shadow-sm">1</span>
+                            ) : al.rank === 2 ? (
+                              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-400/20 text-slate-600 dark:text-slate-300 border border-slate-400/50 text-sm font-black">2</span>
+                            ) : al.rank === 3 ? (
+                              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-700/20 text-amber-600 dark:text-amber-500 border border-amber-700/50 text-sm font-black">3</span>
+                            ) : (
+                              <span className="theme-text-muted text-sm font-mono font-bold">#{al.rank}</span>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center space-x-3">
+                              <div 
+                                className="w-8 h-8 rounded-full bg-slate-800 border theme-border flex items-center justify-center text-xs font-bold theme-text-muted flex-shrink-0 font-mono"
+                              >
+                                {al.name ? al.name[0] : 'A'}
                               </div>
-                              <div className="flex items-center space-x-2 text-xs font-mono mt-0.5">
-                                <span className="theme-label-cyan">@{al.username}</span>
-                                {al.organization && (
-                                  <span className="text-xs px-2 py-0.5 rounded border theme-border theme-text-secondary bg-slate-800/20 font-sans">
-                                    {al.organization}
+                              <div>
+                                <div className="flex items-center space-x-2">
+                                  <span className={`text-sm sm:text-base font-bold ${isMe ? 'theme-label-cyan' : 'theme-text-primary'}`}>
+                                    {al.name}
                                   </span>
-                                )}
+                                  {isMe && (
+                                    <span className="text-[11px] bg-cyan-500 text-slate-950 font-bold px-2 py-0.5 rounded font-mono shadow-sm">
+                                      YOU
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center space-x-2 text-xs font-mono mt-0.5">
+                                  <span className="theme-label-cyan">@{al.username}</span>
+                                  {al.organization && (
+                                    <span className="text-xs px-2 py-0.5 rounded border theme-border theme-text-secondary bg-slate-800/20 font-sans">
+                                      {al.organization}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </td>
-                        <td className="py-3.5 px-4 font-bold text-sm sm:text-base theme-label-cyan font-mono">
-                          {al.batch}
-                        </td>
-                        <td className="py-3.5 px-4 text-center font-bold text-xs sm:text-sm theme-metric-value">
-                          STEP {al.current_step}
-                        </td>
-                        <td className="py-3.5 px-4 text-center font-black text-base sm:text-lg theme-metric-value">
-                          {al.score}
-                        </td>
-                        <td className="py-3.5 px-4 text-right text-xs font-mono theme-text-muted">
-                          {al.last_solved_subms > 0 ? (
-                            new Date(al.last_solved_subms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-                          ) : (
-                            "—"
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                          </td>
+                          <td className="py-3.5 px-4 font-bold text-sm sm:text-base theme-label-cyan font-mono">
+                            {al.batch}
+                          </td>
+                          <td className="py-3.5 px-4 text-center font-bold text-xs sm:text-sm theme-metric-value">
+                            STEP {al.current_step}
+                          </td>
+                          <td className="py-3.5 px-4 text-center font-black text-base sm:text-lg theme-metric-value">
+                            {al.score}
+                          </td>
+                          <td className="py-3.5 px-4 text-right text-xs font-mono theme-text-muted">
+                            {al.last_solved_subms > 0 ? (
+                              new Date(al.last_solved_subms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                            ) : (
+                              "—"
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>

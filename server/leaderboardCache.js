@@ -24,9 +24,14 @@ class LeaderboardCache {
     this.refreshingPromise = (async () => {
       try {
         const users = await db.prepare(`
-          SELECT id, username, name, batch, organization, role, current_step, score, tab_violations, last_solved_subms
+          SELECT id, username, name, batch, organization, role, current_step, score, tab_violations, last_solved_subms, test_started_at
           FROM users
           WHERE role != 'admin'
+            AND (
+              (test_started_at IS NOT NULL AND test_started_at != '' AND test_started_at != 0)
+              OR score > 0 
+              OR current_step > 0
+            )
           ORDER BY score DESC, current_step DESC, last_solved_subms ASC, id ASC
         `).all();
 

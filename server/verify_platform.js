@@ -260,7 +260,23 @@ async function runRigorousTests() {
     assert(lb.leaderboard[0].username === alumB.username, 'Alumni B ranked #1 with 1000 points');
     assert(lb.leaderboard[0].last_solved_subms > 0, 'High-resolution sub-millisecond solve timestamp recorded on winner');
 
-    // 10. Verify Expanded 60-Puzzle Master Library
+    // 9B: Verify unstarted enrolled alumni are excluded from the leaderboard
+    const unstartedUsername = 'unstarted_test_alum_' + Date.now();
+    await db.prepare(`
+      INSERT INTO users (username, passkey, name, batch, phone, organization, role, current_step, score, test_started_at, created_at)
+      VALUES (?, 'pass', 'Unstarted Test User', '20MX', '9999900000', 'Test Org', 'alumni', 0, 0, NULL, ?)
+    `).run(unstartedUsername, Date.now());
+
+    const { leaderboardCache: lbC } = await import('./leaderboardCache.js');
+    await lbC.refreshNow();
+
+    const lbCheck = await fetch(`${BASE}/api/leaderboard`).then(r => r.json());
+    const foundUnstarted = lbCheck.leaderboard.some(u => u.username === unstartedUsername);
+    assert(!foundUnstarted, 'LEADERBOARD FILTER: Enrolled alumnus who has NOT started test is strictly excluded from leaderboard');
+
+    // Clean up
+    await db.prepare('DELETE FROM users WHERE username = ?').run(unstartedUsername);
+    await lbC.refreshNow();
     console.log('\n--- Verifying Expanded 60-Puzzle Master Library ---');
     const countRow = await db.prepare("SELECT COUNT(*) as count FROM nodes").get();
     const totalNodesCount = countRow ? Number(countRow.count) : 0;

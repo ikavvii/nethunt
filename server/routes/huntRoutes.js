@@ -188,6 +188,10 @@ huntRouter.post('/start-test', requireAuth, async (req, res) => {
       metadata: { startedAt: now },
       totalViolations: user.tab_violations || 0
     });
+
+    try {
+      await leaderboardCache.refreshNow();
+    } catch (e) {}
   }
 
   const timerState = await getSessionTimerState(user);

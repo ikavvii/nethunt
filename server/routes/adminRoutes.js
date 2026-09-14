@@ -456,6 +456,9 @@ adminRouter.post('/alumni/:id/timer', async (req, res) => {
     });
   } else if (action === 'reset_timer') {
     await db.prepare('UPDATE users SET test_started_at = NULL, extra_time_minutes = 0, test_submitted_at = NULL WHERE id = ?').run(user.id);
+    try {
+      await leaderboardCache.refreshNow();
+    } catch (e) {}
     return res.json({
       success: true,
       message: `Test session timer reset for ${user.name}. Participant can now re-initialize their test.`
