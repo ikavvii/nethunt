@@ -2,6 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Trophy, Search, Filter, RefreshCw, Award, Shield, Layers, X, EyeOff, Sparkles, ArrowRight } from 'lucide-react';
 
+function formatDuration(ms) {
+  if (!ms || ms <= 0) return '—';
+  const totalSecs = Math.floor(ms / 1000);
+  const mins = Math.floor(totalSecs / 60);
+  const secs = totalSecs % 60;
+  const hours = Math.floor(mins / 60);
+  if (hours > 0) return `${hours}h ${mins}m ${secs}s`;
+  return `${mins}m ${String(secs).padStart(2, '0')}s`;
+}
+
 export default function Leaderboard({ onNavigateToHunt }) {
   const { user, token, eventStatus, leaderboardVisible } = useAuth();
   const [leaderboard, setLeaderboard] = useState([]);
@@ -208,7 +218,7 @@ export default function Leaderboard({ onNavigateToHunt }) {
                     <th className="py-4 px-4">BATCH</th>
                     <th className="py-4 px-4 text-center">STEP</th>
                     <th className="py-4 px-4 text-center">SCORE</th>
-                    <th className="py-4 px-4 text-right">LATEST_SOLVE</th>
+                    <th className="py-4 px-4 text-right">TIME_TAKEN / SOLVE</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y theme-border">
@@ -279,11 +289,22 @@ export default function Leaderboard({ onNavigateToHunt }) {
                           <td className="py-3.5 px-4 text-center font-black text-base sm:text-lg theme-metric-value">
                             {al.score}
                           </td>
-                          <td className="py-3.5 px-4 text-right text-xs font-mono theme-text-muted">
-                            {al.last_solved_subms > 0 ? (
-                              new Date(al.last_solved_subms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                          <td className="py-3.5 px-4 text-right font-mono">
+                            {al.elapsed_time_ms > 0 ? (
+                              <div>
+                                <div className="font-bold text-xs sm:text-sm text-cyan-400">
+                                  {formatDuration(al.elapsed_time_ms)}
+                                </div>
+                                <div className="text-[10px] theme-text-muted mt-0.5">
+                                  {al.last_solved_subms > 0 ? new Date(al.last_solved_subms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''}
+                                </div>
+                              </div>
+                            ) : al.last_solved_subms > 0 ? (
+                              <div className="text-xs theme-text-muted">
+                                {new Date(al.last_solved_subms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                              </div>
                             ) : (
-                              "—"
+                              <span className="text-xs theme-text-muted">—</span>
                             )}
                           </td>
                         </tr>

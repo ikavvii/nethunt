@@ -24,7 +24,12 @@ class LeaderboardCache {
     this.refreshingPromise = (async () => {
       try {
         const users = await db.prepare(`
-          SELECT id, username, name, batch, organization, role, current_step, score, tab_violations, last_solved_subms, test_started_at
+          SELECT id, username, name, batch, organization, role, current_step, score, tab_violations, last_solved_subms, test_started_at,
+                 CASE 
+                   WHEN last_solved_subms > 0 AND test_started_at IS NOT NULL AND CAST(test_started_at AS REAL) > 0 
+                   THEN (last_solved_subms - CAST(test_started_at AS REAL))
+                   ELSE 999999999999 
+                 END AS elapsed_time_ms
           FROM users
           WHERE role != 'admin'
             AND (
@@ -32,21 +37,33 @@ class LeaderboardCache {
               OR score > 0 
               OR current_step > 0
             )
-          ORDER BY score DESC, current_step DESC, last_solved_subms ASC, id ASC
+          ORDER BY score DESC, current_step DESC, elapsed_time_ms ASC, last_solved_subms ASC, id ASC
         `).all();
 
-        this.cachedLeaderboard = users.map((u, idx) => ({
-          rank: idx + 1,
-          id: u.id,
-          username: u.username,
-          name: u.name,
-          batch: u.batch,
-          organization: u.organization || '',
-          current_step: u.current_step,
-          score: u.score,
-          tab_violations: u.tab_violations,
-          last_solved_subms: u.last_solved_subms || 0
-        }));
+        this.cachedLeaderboard = users.map((u, idx) => {
+          const startedMs = !isNaN(Number(u.test_started_at))
+            ? Number(u.test_started_at)
+            : (u.test_started_at ? new Date(u.test_started_at).getTime() : 0);
+
+          const elapsedMs = (u.last_solved_subms > 0 && startedMs > 0)
+            ? Math.max(0, Math.round(u.last_solved_subms - startedMs))
+            : 0;
+
+          return {
+            rank: idx + 1,
+            id: u.id,
+            username: u.username,
+            name: u.name,
+            batch: u.batch,
+            organization: u.organization || '',
+            current_step: u.current_step,
+            score: u.score,
+            tab_violations: u.tab_violations,
+            last_solved_subms: u.last_solved_subms || 0,
+            test_started_at: u.test_started_at || null,
+            elapsed_time_ms: elapsedMs
+          };
+        });
 
         // Aggregate batches in memory without hitting disk
         const batchMap = new Map();

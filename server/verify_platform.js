@@ -22,6 +22,12 @@ async function runRigorousTests() {
   }
 
   try {
+    // Reset admin credentials and event state for idempotent test runs
+    await db.prepare("UPDATE config SET value = 'login2026admin' WHERE key = 'admin_key'").run();
+    await db.prepare("UPDATE users SET passkey = 'login2026admin' WHERE username = 'admin'").run();
+    await db.prepare("UPDATE config SET value = 'active' WHERE key = 'event_status'").run();
+    await db.prepare("UPDATE config SET value = 'true' WHERE key = 'leaderboard_visible'").run();
+
     // 1. Health check
     const health = await fetch(`${BASE}/api/health`).then(r => r.json());
     assert(health.status === 'online', 'Server online and serving health check');
@@ -948,6 +954,57 @@ async function runRigorousTests() {
     // Reset back to 60 minutes and 12 nodes for normal operation
     await db.prepare("UPDATE config SET value = '60' WHERE key = 'test_duration_minutes'").run();
     await db.prepare("UPDATE config SET value = '12' WHERE key = 'path_length'").run();
+
+    // 20J: Fair Game Speed Tie-Breaker & Unstarted Exclusion
+    console.log('\n--- Testing Fair Game Speed Tie-Breaker (Elapsed Session Time) ---');
+    await db.prepare("DELETE FROM users WHERE username IN ('speed_user_slow', 'speed_user_fast', 'unstarted_user')").run();
+
+    const baseT = Date.now();
+    // speed_user_slow: started 2 hours ago, solved in 15 minutes (900,000 ms), score 1000, step 1, last_solved = baseT - 105 mins
+    const slowStarted = baseT - (120 * 60 * 1000);
+    const slowSolved = slowStarted + (15 * 60 * 1000);
+    await db.prepare(`
+      INSERT INTO users (username, name, passkey, batch, role, current_step, score, test_started_at, last_solved_subms, created_at)
+      VALUES ('speed_user_slow', 'Slow Runner', 'pass123', '2010', 'alumni', 1, 1000, ?, ?, ?)
+    `).run(slowStarted, slowSolved, slowStarted);
+
+    // speed_user_fast: started 30 mins ago, solved in 3 minutes (180,000 ms), score 1000, step 1, last_solved = baseT - 27 mins
+    const fastStarted = baseT - (30 * 60 * 1000);
+    const fastSolved = fastStarted + (3 * 60 * 1000);
+    await db.prepare(`
+      INSERT INTO users (username, name, passkey, batch, role, current_step, score, test_started_at, last_solved_subms, created_at)
+      VALUES ('speed_user_fast', 'Fast Runner', 'pass123', '2012', 'alumni', 1, 1000, ?, ?, ?)
+    `).run(fastStarted, fastSolved, fastStarted);
+
+    // unstarted_user: enrolled, score 0, step 0, test_started_at NULL
+    await db.prepare(`
+      INSERT INTO users (username, name, passkey, batch, role, current_step, score, test_started_at, last_solved_subms, created_at)
+      VALUES ('unstarted_user', 'Not Started', 'pass123', '2020', 'alumni', 0, 0, NULL, 0, ?)
+    `).run(baseT);
+
+    // Wait for cache invalidation window (>500ms)
+    await new Promise(r => setTimeout(r, 600));
+
+    // Fetch leaderboard
+    const lbRes = await fetch(`${BASE}/api/leaderboard`).then(r => r.json());
+    const lbEntries = lbRes.leaderboard || [];
+
+    // Assert unstarted user is excluded
+    const unstartedInLb = lbEntries.some(u => u.username === 'unstarted_user');
+    assert(!unstartedInLb, 'LEADERBOARD FILTER: Enrolled alumni who have not started are excluded from active leaderboard');
+
+    // Find fast and slow runners in leaderboard
+    const fastIndex = lbEntries.findIndex(u => u.username === 'speed_user_fast');
+    const slowIndex = lbEntries.findIndex(u => u.username === 'speed_user_slow');
+
+    assert(fastIndex !== -1 && slowIndex !== -1, 'FAIR GAME: Both active test participants present on leaderboard');
+    assert(fastIndex < slowIndex, `FAIR GAME: Fast Runner (Rank #${fastIndex + 1}, 3 mins) ranks above Slow Runner (Rank #${slowIndex + 1}, 15 mins) despite solving later on calendar`);
+
+    const fastEntry = lbEntries[fastIndex];
+    assert(fastEntry.elapsed_time_ms === (3 * 60 * 1000), 'FAIR GAME: Fast Runner elapsed_time_ms accurately computed as 180,000ms');
+
+    // Cleanup test users
+    await db.prepare("DELETE FROM users WHERE username IN ('speed_user_slow', 'speed_user_fast', 'unstarted_user')").run();
 
     // Clean up: Reset back to default in db for clean state
     await db.prepare("UPDATE config SET value = 'login2026admin' WHERE key = 'admin_key'").run();

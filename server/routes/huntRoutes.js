@@ -487,10 +487,17 @@ huntRouter.post('/submit', requireAuth, async (req, res) => {
     `).run(pointsEarned, submsNow, user.id, currentStep);
 
     // Update with sub-millisecond timestamp for strict tie breaking
-    await db.prepare(`
-      UPDATE users SET score = ?, current_step = ?, last_solved_subms = ?
-      WHERE id = ?
-    `).run(newTotalScore, nextStep, submsNow, user.id);
+    if (nextStep >= path.length && !user.test_submitted_at) {
+      await db.prepare(`
+        UPDATE users SET score = ?, current_step = ?, last_solved_subms = ?, test_submitted_at = ?
+        WHERE id = ?
+      `).run(newTotalScore, nextStep, submsNow, Date.now(), user.id);
+    } else {
+      await db.prepare(`
+        UPDATE users SET score = ?, current_step = ?, last_solved_subms = ?
+        WHERE id = ?
+      `).run(newTotalScore, nextStep, submsNow, user.id);
+    }
 
     // Invalidate and refresh in-memory leaderboard cache immediately
     await leaderboardCache.refreshNow();
