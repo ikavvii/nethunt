@@ -15,14 +15,8 @@ const tursoToken = process.env.TURSO_AUTH_TOKEN;
 let tursoClient = null;
 let sqliteDb = null;
 
-if (tursoUrl) {
-  const { createClient } = await import('@libsql/client/web');
-  tursoClient = createClient({
-    url: tursoUrl,
-    authToken: tursoToken,
-  });
-  console.log(`⚡ NetHunt Database: Connected to Turso Cloud (${tursoUrl})`);
-} else {
+// Always initialize local SQLite database as reliable storage / fallback
+try {
   const { DatabaseSync } = await import('node:sqlite');
   const isVercel = Boolean(process.env.VERCEL);
   const dataDir = isVercel ? path.join('/tmp', 'nethunt-data') : path.join(__dirname, 'data');
@@ -33,13 +27,31 @@ if (tursoUrl) {
   sqliteDb = new DatabaseSync(dbPath);
   try {
     sqliteDb.exec(`
-      PRAGMA journal_mode = WAL;
+      PRAGMA journal_mode = DELETE;
       PRAGMA foreign_keys = ON;
+      PRAGMA busy_timeout = 5000;
     `);
   } catch (e) {
     // Non-fatal if in-memory or restricted
   }
-  console.log(`⚡ NetHunt Database: Connected to Local SQLite (${dbPath})`);
+  console.log(`⚡ NetHunt Database: Local SQLite Ready (${dbPath})`);
+} catch (e) {
+  console.error('Local SQLite initialization error:', e.message);
+}
+
+// Connect to Turso Cloud if URL is provided
+if (tursoUrl) {
+  try {
+    const { createClient } = await import('@libsql/client/web');
+    tursoClient = createClient({
+      url: tursoUrl,
+      authToken: tursoToken,
+    });
+    console.log(`⚡ NetHunt Database: Connected to Turso Cloud (${tursoUrl})`);
+  } catch (e) {
+    console.error('Failed to initialize Turso client, falling back to local SQLite:', e.message);
+    tursoClient = null;
+  }
 }
 
 function normalizeArgs(args) {
@@ -50,37 +62,64 @@ function normalizeArgs(args) {
 }
 
 export const db = {
-  isTurso: Boolean(tursoUrl),
-  tursoClient,
-  sqliteDb,
+  isTurso: Boolean(tursoUrl && tursoClient),
+  get tursoClient() { return tursoClient; },
+  get sqliteDb() { return sqliteDb; },
 
   async get(sql, ...args) {
     const flatArgs = normalizeArgs(args);
     if (tursoClient) {
-      const res = await tursoClient.execute({ sql, args: flatArgs });
-      return res.rows && res.rows.length > 0 ? { ...res.rows[0] } : undefined;
+      try {
+        const res = await tursoClient.execute({ sql, args: flatArgs });
+        return res.rows && res.rows.length > 0 ? { ...res.rows[0] } : undefined;
+      } catch (tursoErr) {
+        console.warn('Turso query fallback to local SQLite (get):', tursoErr.message);
+        if (sqliteDb) return sqliteDb.prepare(sql).get(...flatArgs);
+        throw tursoErr;
+      }
     }
+    if (!sqliteDb) throw new Error('Database not initialized');
     return sqliteDb.prepare(sql).get(...flatArgs);
   },
 
   async all(sql, ...args) {
     const flatArgs = normalizeArgs(args);
     if (tursoClient) {
-      const res = await tursoClient.execute({ sql, args: flatArgs });
-      return (res.rows || []).map(r => ({ ...r }));
+      try {
+        const res = await tursoClient.execute({ sql, args: flatArgs });
+        return (res.rows || []).map(r => ({ ...r }));
+      } catch (tursoErr) {
+        console.warn('Turso query fallback to local SQLite (all):', tursoErr.message);
+        if (sqliteDb) return sqliteDb.prepare(sql).all(...flatArgs);
+        throw tursoErr;
+      }
     }
+    if (!sqliteDb) throw new Error('Database not initialized');
     return sqliteDb.prepare(sql).all(...flatArgs);
   },
 
   async run(sql, ...args) {
     const flatArgs = normalizeArgs(args);
     if (tursoClient) {
-      const res = await tursoClient.execute({ sql, args: flatArgs });
-      return {
-        changes: Number(res.rowsAffected || 0),
-        lastInsertRowid: Number(res.lastInsertRowid || 0)
-      };
+      try {
+        const res = await tursoClient.execute({ sql, args: flatArgs });
+        return {
+          changes: Number(res.rowsAffected || 0),
+          lastInsertRowid: Number(res.lastInsertRowid || 0)
+        };
+      } catch (tursoErr) {
+        console.warn('Turso query fallback to local SQLite (run):', tursoErr.message);
+        if (sqliteDb) {
+          const info = sqliteDb.prepare(sql).run(...flatArgs);
+          return {
+            changes: Number(info.changes || 0),
+            lastInsertRowid: Number(info.lastInsertRowid || 0)
+          };
+        }
+        throw tursoErr;
+      }
     }
+    if (!sqliteDb) throw new Error('Database not initialized');
     const info = sqliteDb.prepare(sql).run(...flatArgs);
     return {
       changes: Number(info.changes || 0),
@@ -90,9 +129,19 @@ export const db = {
 
   async exec(sql) {
     if (tursoClient) {
-      await tursoClient.executeMultiple(sql);
-      return;
+      try {
+        await tursoClient.executeMultiple(sql);
+        return;
+      } catch (tursoErr) {
+        console.warn('Turso query fallback to local SQLite (exec):', tursoErr.message);
+        if (sqliteDb) {
+          sqliteDb.exec(sql);
+          return;
+        }
+        throw tursoErr;
+      }
     }
+    if (!sqliteDb) throw new Error('Database not initialized');
     sqliteDb.exec(sql);
   },
 

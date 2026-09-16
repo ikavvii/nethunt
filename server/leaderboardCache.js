@@ -24,23 +24,17 @@ class LeaderboardCache {
     this.refreshingPromise = (async () => {
       try {
         const users = await db.prepare(`
-          SELECT id, username, name, batch, organization, role, current_step, score, tab_violations, last_solved_subms, test_started_at,
-                 CASE 
-                   WHEN last_solved_subms > 0 AND test_started_at IS NOT NULL AND CAST(test_started_at AS REAL) > 0 
-                   THEN (last_solved_subms - CAST(test_started_at AS REAL))
-                   ELSE 999999999999 
-                 END AS elapsed_time_ms
+          SELECT id, username, name, batch, organization, role, current_step, score, tab_violations, last_solved_subms, test_started_at
           FROM users
           WHERE role != 'admin'
-            AND (
-              (test_started_at IS NOT NULL AND test_started_at != '' AND test_started_at != 0)
-              OR score > 0 
-              OR current_step > 0
-            )
-          ORDER BY score DESC, current_step DESC, elapsed_time_ms ASC, last_solved_subms ASC, id ASC
         `).all();
 
-        this.cachedLeaderboard = users.map((u, idx) => {
+        const activeUsers = (users || []).filter(u => {
+          const started = u.test_started_at && u.test_started_at !== '0' && u.test_started_at !== 0;
+          return started || (u.score && u.score > 0) || (u.current_step && u.current_step > 0);
+        });
+
+        const mapped = activeUsers.map(u => {
           const startedMs = !isNaN(Number(u.test_started_at))
             ? Number(u.test_started_at)
             : (u.test_started_at ? new Date(u.test_started_at).getTime() : 0);
@@ -50,20 +44,34 @@ class LeaderboardCache {
             : 0;
 
           return {
-            rank: idx + 1,
             id: u.id,
             username: u.username,
             name: u.name,
             batch: u.batch,
             organization: u.organization || '',
-            current_step: u.current_step,
-            score: u.score,
-            tab_violations: u.tab_violations,
+            current_step: u.current_step || 0,
+            score: u.score || 0,
+            tab_violations: u.tab_violations || 0,
             last_solved_subms: u.last_solved_subms || 0,
             test_started_at: u.test_started_at || null,
             elapsed_time_ms: elapsedMs
           };
         });
+
+        mapped.sort((a, b) => {
+          if (b.score !== a.score) return b.score - a.score;
+          if (b.current_step !== a.current_step) return b.current_step - a.current_step;
+          const aElapsed = a.elapsed_time_ms > 0 ? a.elapsed_time_ms : 999999999999;
+          const bElapsed = b.elapsed_time_ms > 0 ? b.elapsed_time_ms : 999999999999;
+          if (aElapsed !== bElapsed) return aElapsed - bElapsed;
+          if (a.last_solved_subms !== b.last_solved_subms) return a.last_solved_subms - b.last_solved_subms;
+          return a.id - b.id;
+        });
+
+        this.cachedLeaderboard = mapped.map((u, idx) => ({
+          rank: idx + 1,
+          ...u
+        }));
 
         // Aggregate batches in memory without hitting disk
         const batchMap = new Map();
