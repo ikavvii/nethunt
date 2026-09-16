@@ -11,6 +11,7 @@ import { shoutboxRouter } from './routes/shoutboxRoutes.js';
 import { adminRouter } from './routes/adminRoutes.js';
 
 import { leaderboardCache } from './leaderboardCache.js';
+import { initPsgSyncBackgroundJob } from './psgSyncService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,6 +19,7 @@ const __dirname = path.dirname(__filename);
 // Initialize DB schema & seed levels
 await initDatabase();
 await leaderboardCache.refreshNow();
+initPsgSyncBackgroundJob();
 
 const app = express();
 const PORT = process.env.PORT || 3001;

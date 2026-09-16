@@ -111,6 +111,14 @@ export default function AdminDashboard() {
   const [adminKeyStatus, setAdminKeyStatus] = useState(null);
   const [adminKeyLoading, setAdminKeyLoading] = useState(false);
 
+  // PSG Portal Sync state
+  const [isPsgSyncModalOpen, setIsPsgSyncModalOpen] = useState(false);
+  const [psgSyncStatus, setPsgSyncStatus] = useState(null);
+  const [isSyncingPsg, setIsSyncingPsg] = useState(false);
+  const [psgLoginId, setPsgLoginId] = useState('');
+  const [psgPassword, setPsgPassword] = useState('');
+  const [psgSyncResult, setPsgSyncResult] = useState(null);
+
   const handleChangeAdminKey = async (e) => {
     e.preventDefault();
     if (!newAdminKeyInput || newAdminKeyInput.trim().length < 6) {
@@ -214,6 +222,48 @@ export default function AdminDashboard() {
     } catch (e) {}
   };
 
+  const fetchPsgSyncStatus = async () => {
+    try {
+      const res = await fetch('/api/admin/psg-sync/status', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPsgSyncStatus(data);
+      }
+    } catch (e) {}
+  };
+
+  const handleTriggerPsgSync = async (e) => {
+    if (e) e.preventDefault();
+    setIsSyncingPsg(true);
+    setPsgSyncResult(null);
+    try {
+      const payload = {};
+      if (psgLoginId.trim()) payload.loginId = psgLoginId.trim();
+      if (psgPassword.trim()) payload.password = psgPassword.trim();
+
+      const res = await fetch('/api/admin/psg-sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      setPsgSyncResult(data);
+      if (res.ok) {
+        fetchAlumni();
+        fetchPsgSyncStatus();
+      }
+    } catch (err) {
+      setPsgSyncResult({ success: false, error: 'Sync failed: ' + err.message });
+    } finally {
+      setIsSyncingPsg(false);
+    }
+  };
+
   const fetchProctorLogs = async (manual = false) => {
     try {
       if (manual) setIsRefreshingProctor(true);
@@ -295,10 +345,11 @@ export default function AdminDashboard() {
       fetchProctorLogs();
       fetchNodes();
       fetchConfig();
+      fetchPsgSyncStatus();
     }
   }, [token, user, tab, searchQuery, proctorFilterType, proctorSearch]);
 
-  // Real-time SSE listener for Proctor Violations
+  // Real-time SSE listener for Proctor Violations & Alumni updates
   useEffect(() => {
     if (!token || user?.role !== 'admin') return;
 
@@ -318,6 +369,9 @@ export default function AdminDashboard() {
             }
             return a;
           }));
+        } else if (data.type === 'alumni_updated') {
+          fetchAlumni();
+          fetchPsgSyncStatus();
         }
       } catch (err) {}
     };
@@ -844,6 +898,20 @@ export default function AdminDashboard() {
             </div>
             <div className="flex items-center space-x-2">
               <button
+                onClick={() => {
+                  setIsPsgSyncModalOpen(true);
+                  fetchPsgSyncStatus();
+                }}
+                title="Synchronize registered alumni from login.psgtech.ac.in"
+                className="px-3.5 py-2 rounded-lg border border-red-500/40 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-bold text-xs flex items-center space-x-1.5 font-mono shadow-sm cursor-pointer whitespace-nowrap"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncingPsg ? 'animate-spin' : ''}`} />
+                <span>Sync PSG Portal</span>
+                {psgSyncStatus?.isConfigured && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5" title="Background Auto-Sync Active"></span>
+                )}
+              </button>
+              <button
                 onClick={handleExportCSV}
                 title="Download full alumni roster as CSV"
                 className="px-3.5 py-2 rounded-lg border theme-border theme-text-secondary hover:theme-text-primary hover:theme-bg-surface font-bold text-xs flex items-center space-x-1.5 font-mono shadow-sm cursor-pointer whitespace-nowrap"
@@ -1065,6 +1133,140 @@ export default function AdminDashboard() {
             </div>
           </div>
 
+        </div>
+      )}
+
+      {/* PSG Portal Alumni Live Sync Modal */}
+      {isPsgSyncModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="theme-bg-card border theme-border rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-2xl relative space-y-5">
+            <div className="flex justify-between items-center border-b theme-border pb-3">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-8 h-8 rounded-lg bg-red-600/20 text-red-500 border border-red-500/40 flex items-center justify-center font-bold">
+                  <RefreshCw className={`w-4 h-4 ${isSyncingPsg ? 'animate-spin' : ''}`} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base theme-text-primary">
+                    PSG Portal Alumni Live Sync
+                  </h3>
+                  <p className="text-[11px] theme-text-muted font-mono">
+                    Direct sync with https://login.psgtech.ac.in/api/users
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsPsgSyncModalOpen(false)} 
+                className="theme-text-muted hover:theme-text-primary p-1 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Server Configuration & Telemetry Status */}
+            <div className="p-3.5 rounded-xl border theme-border theme-bg-surface space-y-2 text-xs font-mono">
+              <div className="flex items-center justify-between">
+                <span className="theme-text-secondary font-bold">Automatic Background Polling:</span>
+                {psgSyncStatus?.isConfigured ? (
+                  <span className="inline-flex items-center space-x-1 text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping mr-1"></span>
+                    ACTIVE ({psgSyncStatus.intervalMinutes}m cycle)
+                  </span>
+                ) : (
+                  <span className="text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
+                    ON-DEMAND (Set Render Env Vars to Automate)
+                  </span>
+                )}
+              </div>
+              {psgSyncStatus?.lastSyncAt && (
+                <div className="flex items-center justify-between text-[11px] theme-text-muted">
+                  <span>Last Synchronization:</span>
+                  <span>{new Date(psgSyncStatus.lastSyncAt).toLocaleTimeString()} ({psgSyncStatus.status})</span>
+                </div>
+              )}
+            </div>
+
+            {/* Credentials Form (if not configured on server, or to use alternate account) */}
+            <div className="space-y-3 text-xs">
+              <p className="text-[11px] theme-text-secondary">
+                {psgSyncStatus?.isConfigured
+                  ? 'Server has active credentials configured in Render environment variables. Click "Sync Now" to fetch immediately, or provide override credentials below.'
+                  : 'Enter your PSG Portal admin credentials below to trigger a sync, or set PSG_PORTAL_LOGIN_ID and PSG_PORTAL_PASSWORD in Render for automated background sync.'}
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block theme-text-secondary mb-1 font-mono">Login ID / Email</label>
+                  <input
+                    type="text"
+                    value={psgLoginId}
+                    onChange={(e) => setPsgLoginId(e.target.value)}
+                    placeholder={psgSyncStatus?.configuredLoginId || 'admin@psgtech.ac.in'}
+                    className="w-full theme-bg-surface border theme-border rounded-xl p-2.5 theme-text-primary text-xs font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block theme-text-secondary mb-1 font-mono">Password</label>
+                  <input
+                    type="password"
+                    value={psgPassword}
+                    onChange={(e) => setPsgPassword(e.target.value)}
+                    placeholder={psgSyncStatus?.isConfigured ? '•••••••• (using saved)' : 'Enter password'}
+                    className="w-full theme-bg-surface border theme-border rounded-xl p-2.5 theme-text-primary text-xs font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Sync Results Feedback */}
+            {psgSyncResult && (
+              <div className={`p-3 rounded-xl border text-xs font-mono ${
+                psgSyncResult.success 
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
+                  : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+              }`}>
+                <div className="font-bold flex items-center space-x-1.5 mb-1">
+                  {psgSyncResult.success ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                  <span>{psgSyncResult.message || psgSyncResult.error}</span>
+                </div>
+                {psgSyncResult.success && (
+                  <div className="text-[11px] space-y-1 mt-2 text-slate-300">
+                    <div>• Total Alumni on Portal: <strong className="text-white">{psgSyncResult.totalAlumniFound}</strong></div>
+                    <div>• New Alumni Enrolled in NetHunt: <strong className="text-emerald-400">{psgSyncResult.enrolledCount}</strong></div>
+                    <div>• Already Enrolled (Skipped safely): <strong className="text-slate-400">{psgSyncResult.skippedCount}</strong></div>
+                    {psgSyncResult.enrolledUsers?.length > 0 && (
+                      <div className="mt-2 max-h-32 overflow-y-auto p-2 bg-black/40 rounded border theme-border space-y-1">
+                        <div className="text-[10px] uppercase font-bold text-emerald-400">Newly Enrolled Alumni:</div>
+                        {psgSyncResult.enrolledUsers.map(u => (
+                          <div key={u.id} className="text-[11px] text-slate-200">
+                            + {u.name} ({u.batch}) — @{u.username} (Passkey: {u.phone})
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex justify-end space-x-3 pt-2 border-t theme-border">
+              <button
+                type="button"
+                onClick={() => setIsPsgSyncModalOpen(false)}
+                className="px-4 py-2 rounded-xl border theme-border theme-text-secondary hover:theme-text-primary text-xs font-mono cursor-pointer"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={handleTriggerPsgSync}
+                disabled={isSyncingPsg}
+                className="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs font-mono shadow-md flex items-center space-x-2 cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncingPsg ? 'animate-spin' : ''}`} />
+                <span>{isSyncingPsg ? 'Syncing...' : 'Sync Now'}</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

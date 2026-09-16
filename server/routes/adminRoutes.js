@@ -3,6 +3,7 @@ import { db, assignPathToUser, createNode, updateNode, deleteNode } from '../db.
 import { requireAdmin } from '../auth.js';
 import { broadcastEvent } from '../events.js';
 import { leaderboardCache } from '../leaderboardCache.js';
+import { syncPsgPortalAlumni, getPsgSyncStatus } from '../psgSyncService.js';
 
 export const adminRouter = express.Router();
 
@@ -711,3 +712,29 @@ adminRouter.post('/change-admin-key', async (req, res) => {
     message: 'Game Master Secret Key updated successfully. The default login2026admin key is revoked and only your new key is valid.'
   });
 });
+
+// GET PSG Portal Sync Status & Configuration
+adminRouter.get('/psg-sync/status', async (req, res) => {
+  try {
+    const status = getPsgSyncStatus();
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to retrieve sync status: ' + err.message });
+  }
+});
+
+// TRIGGER PSG Portal Alumni Synchronization (On-demand or with credentials)
+adminRouter.post('/psg-sync', async (req, res) => {
+  try {
+    const { loginId, password, token } = req.body || {};
+    const result = await syncPsgPortalAlumni({ loginId, password, token });
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(400).json(result);
+    }
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Sync failed: ' + err.message });
+  }
+});
+

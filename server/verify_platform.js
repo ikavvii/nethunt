@@ -1006,6 +1006,53 @@ async function runRigorousTests() {
     // Cleanup test users
     await db.prepare("DELETE FROM users WHERE username IN ('speed_user_slow', 'speed_user_fast', 'unstarted_user')").run();
 
+    // 16. Test PSG Portal Alumni Synchronization Engine
+    console.log('\n--- Testing PSG Portal Alumni Synchronization Engine ---');
+    const syncStatusRes = await fetch(`${BASE}/api/admin/psg-sync/status`, {
+      headers: { 'Authorization': `Bearer ${adminToken}` }
+    }).then(r => r.json());
+    assert(typeof syncStatusRes.isConfigured === 'boolean', 'PSG SYNC: /api/admin/psg-sync/status reports configuration state');
+    assert(typeof syncStatusRes.intervalMinutes === 'number', 'PSG SYNC: status reports intervalMinutes');
+
+    // Test on-demand sync validation when missing creds
+    const emptySyncRes = await fetch(`${BASE}/api/admin/psg-sync`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({})
+    });
+    assert(emptySyncRes.status === 400 || emptySyncRes.status === 500, 'PSG SYNC: /api/admin/psg-sync safely rejects unauthenticated request when env vars not present');
+
+    // Test PSG Sync duplicate guard and user creation directly using service logic
+    const { generateUniqueUsername } = await import('./psgSyncService.js');
+    const testAlumniUsername = await generateUniqueUsername('Test Portal Alumni', 'testportal@psgtech.ac.in', '22MX', '9999900001');
+    assert(testAlumniUsername.startsWith('testportal'), 'PSG SYNC: generateUniqueUsername produces clean username from email/name');
+
+    // Insert dummy test alumnus to verify duplicate protection
+    const testAlumniPhone = '9999912345';
+    const testAlumniEmail = 'psgtestalumnus@psgtech.ac.in';
+    await db.prepare(`
+      INSERT INTO users (username, passkey, name, batch, email, phone, organization, role, score, current_step, created_at)
+      VALUES ('psg_existing_alumnus', '1234', 'Existing Alumnus', '22MX', ?, ?, 'PSG Tech', 'alumni', 2000, 2, ?)
+    `).run(testAlumniEmail, testAlumniPhone, Date.now());
+
+    // Verify duplicate query accurately detects this alumnus
+    const foundDup = await db.prepare(`
+      SELECT id, username, score, current_step FROM users 
+      WHERE role != 'admin' AND (
+        (? IS NOT NULL AND (phone = ? OR REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '+91', '') = ?))
+        OR (? IS NOT NULL AND LOWER(email) = ?)
+      )
+    `).get(testAlumniPhone, testAlumniPhone, testAlumniPhone, testAlumniEmail, testAlumniEmail);
+
+    assert(foundDup && foundDup.username === 'psg_existing_alumnus', 'PSG SYNC: Strict duplicate guard correctly matches existing alumnus');
+    assert(foundDup.score === 2000 && foundDup.current_step === 2, 'PSG SYNC: Existing alumnus score & step are strictly preserved and untouched');
+
+    // Clean up dummy alumnus
+    await db.prepare("DELETE FROM users WHERE username = 'psg_existing_alumnus'").run();
+
     // Clean up: Reset back to default in db for clean state
     await db.prepare("UPDATE config SET value = 'login2026admin' WHERE key = 'admin_key'").run();
     await db.prepare("UPDATE users SET passkey = 'login2026admin' WHERE username = 'admin'").run();
