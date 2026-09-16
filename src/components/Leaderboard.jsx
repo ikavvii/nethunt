@@ -32,6 +32,10 @@ export default function Leaderboard({ onNavigateToHunt }) {
         fetch('/api/leaderboard', { headers }),
         fetch('/api/leaderboard/batches', { headers })
       ]);
+      if (!lbRes.ok || !bRes.ok) {
+        console.warn('Leaderboard telemetry sync pending (HTTP', lbRes.status, bRes.status, ')');
+        return;
+      }
       const lbData = await lbRes.json();
       const bData = await bRes.json();
       setLeaderboard(lbData.leaderboard || []);

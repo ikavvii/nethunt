@@ -74,13 +74,46 @@ app.get('/api/events/status', async (req, res) => {
       eventWindow: formatEventWindow(startDate, endDate)
     });
   } catch (e) {
+    console.error('EVENT STATUS ERROR:', e);
     res.json({ 
       status: 'active', 
       leaderboardVisible: true,
       eventStartDate: '2026-09-12T09:00:00+05:30',
       eventEndDate: '2026-09-18T09:00:00+05:30',
-      eventWindow: '12 Sep 2026 (09:00 AM) – 18 Sep 2026 (09:00 AM)'
+      eventWindow: '12 Sep 2026 (09:00 AM) – 18 Sep 2026 (09:00 AM)',
+      _debug_error: e.message,
+      _debug_stack: e.stack
     });
+  }
+});
+
+// Diagnostic endpoint for troubleshooting cloud deployments
+app.get('/api/diagnostic', async (req, res) => {
+  try {
+    const isTurso = Boolean(process.env.TURSO_DATABASE_URL);
+    const tursoUrl = process.env.TURSO_DATABASE_URL ? (process.env.TURSO_DATABASE_URL.substring(0, 16) + '...') : null;
+    const hasToken = Boolean(process.env.TURSO_AUTH_TOKEN);
+    let dbTest = 'untested';
+    let dbTestError = null;
+    try {
+      const row = await db.prepare("SELECT value FROM config WHERE key = 'event_status'").get();
+      dbTest = 'success: ' + JSON.stringify(row);
+    } catch (dbe) {
+      dbTest = 'failed: ' + dbe.message;
+      dbTestError = { message: dbe.message, stack: dbe.stack, code: dbe.code };
+    }
+
+    res.json({
+      nodeVersion: process.version,
+      platform: process.platform,
+      isTurso,
+      tursoUrl,
+      hasToken,
+      dbTest,
+      dbTestError
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message, stack: err.stack });
   }
 });
 
@@ -111,6 +144,19 @@ app.use((req, res, next) => {
     if (err) {
       next();
     }
+  });
+});
+
+// Global API error handler returning JSON instead of HTML
+app.use((err, req, res, next) => {
+  console.error('SERVER_ERROR:', err);
+  if (res.headersSent) {
+    return next(err);
+  }
+  res.status(err.status || 500).json({
+    error: err.message || 'Internal Server Error',
+    code: err.code,
+    stack: err.stack
   });
 });
 

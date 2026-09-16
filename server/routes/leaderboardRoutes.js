@@ -26,43 +26,51 @@ async function isLeaderboardVisible() {
 }
 
 // GET Global Standings (Fast in-memory cache for 500+ concurrent players)
-leaderboardRouter.get('/', async (req, res) => {
-  const visible = await isLeaderboardVisible();
-  const isAdmin = isRequestAdmin(req);
+leaderboardRouter.get('/', async (req, res, next) => {
+  try {
+    const visible = await isLeaderboardVisible();
+    const isAdmin = isRequestAdmin(req);
 
-  if (!visible && !isAdmin) {
-    return res.json({
-      visible: false,
-      message: 'Standings telemetry is temporarily frozen/hidden by the Game Master.',
-      leaderboard: []
+    if (!visible && !isAdmin) {
+      return res.json({
+        visible: false,
+        message: 'Standings telemetry is temporarily frozen/hidden by the Game Master.',
+        leaderboard: []
+      });
+    }
+
+    const standings = await leaderboardCache.getLeaderboard();
+    res.json({
+      visible,
+      isAdminPreview: !visible && isAdmin,
+      leaderboard: standings
     });
+  } catch (err) {
+    next(err);
   }
-
-  const standings = await leaderboardCache.getLeaderboard();
-  res.json({
-    visible,
-    isAdminPreview: !visible && isAdmin,
-    leaderboard: standings
-  });
 });
 
 // GET Batch Standings (Aggregated in-memory)
-leaderboardRouter.get('/batches', async (req, res) => {
-  const visible = await isLeaderboardVisible();
-  const isAdmin = isRequestAdmin(req);
+leaderboardRouter.get('/batches', async (req, res, next) => {
+  try {
+    const visible = await isLeaderboardVisible();
+    const isAdmin = isRequestAdmin(req);
 
-  if (!visible && !isAdmin) {
-    return res.json({
-      visible: false,
-      message: 'Batch standings are temporarily frozen/hidden by the Game Master.',
-      batches: []
+    if (!visible && !isAdmin) {
+      return res.json({
+        visible: false,
+        message: 'Batch standings are temporarily frozen/hidden by the Game Master.',
+        batches: []
+      });
+    }
+
+    const batches = await leaderboardCache.getBatches();
+    res.json({
+      visible,
+      isAdminPreview: !visible && isAdmin,
+      batches
     });
+  } catch (err) {
+    next(err);
   }
-
-  const batches = await leaderboardCache.getBatches();
-  res.json({
-    visible,
-    isAdminPreview: !visible && isAdmin,
-    batches
-  });
 });
