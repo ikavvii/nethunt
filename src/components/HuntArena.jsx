@@ -85,6 +85,15 @@ export default function HuntArena({ onOpenAuth, onNavigateToLeaderboard }) {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
+      if (!res.ok) {
+        console.warn('Current node fetch returned non-OK status:', res.status, data);
+        if (res.status === 404 || res.status === 503) {
+          setTimeout(() => {
+            fetchCurrentNode();
+          }, 1200);
+        }
+        return;
+      }
       if (data.eventStatus && setEventStatus) {
         setEventStatus(data.eventStatus);
       }

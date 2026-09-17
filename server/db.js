@@ -376,9 +376,73 @@ async function seedSystem() {
     await db.exec('DELETE FROM nodes');
     await populateAnalyticalMasterNodes();
   }
+
+  // Self-heal any alumni trajectories containing obsolete/missing node IDs
+  await healAllUserTrajectories();
 }
 
-export async function assignPathToUser(userId) {
+export async function validateAndRepairUserTrajectory(user) {
+  if (!user || user.role === 'admin') return null;
+  try {
+    const validNodeRows = await db.prepare("SELECT id FROM nodes").all();
+    const validNodeIds = new Set(validNodeRows.map(n => n.id));
+    if (validNodeIds.size === 0) return null;
+
+    let path = [];
+    try { path = JSON.parse(user.assigned_path_json || '[]'); } catch (e) {}
+
+    const hasInvalidNodes = !Array.isArray(path) || path.length === 0 || path.some(id => !validNodeIds.has(id));
+    if (hasInvalidNodes) {
+      console.log(`[SELF-HEAL] Re-assigning valid trajectory for user @${user.username} (id: ${user.id})...`);
+      const preserveStep = (user.current_step || 0) > 0;
+      const newPath = await assignPathToUser(user.id, !preserveStep);
+      return newPath;
+    }
+    return path;
+  } catch (err) {
+    console.error(`[SELF-HEAL] validateAndRepairUserTrajectory error for user ${user.id}:`, err.message);
+    return null;
+  }
+}
+
+export async function healAllUserTrajectories() {
+  try {
+    const users = await db.prepare("SELECT id, username, score, current_step, test_started_at, assigned_path_json FROM users WHERE role != 'admin'").all();
+    if (!users || users.length === 0) return;
+
+    const validNodeRows = await db.prepare("SELECT id FROM nodes").all();
+    const validNodeIds = new Set(validNodeRows.map(n => n.id));
+    if (validNodeIds.size === 0) return;
+
+    let healedCount = 0;
+    for (const u of users) {
+      let path = [];
+      try { path = JSON.parse(u.assigned_path_json || '[]'); } catch (e) {}
+
+      const hasInvalidNodes = !Array.isArray(path) || path.length === 0 || path.some(id => !validNodeIds.has(id));
+      if (hasInvalidNodes) {
+        console.log(`[SELF-HEAL] Re-assigning valid trajectory for alumnus @${u.username} (id: ${u.id})...`);
+        const preserveStep = (u.current_step || 0) > 0;
+        await assignPathToUser(u.id, !preserveStep);
+
+        // If user was stuck at step 0 with 0 score due to broken trajectory, reset timer so they get their full duration
+        if ((u.current_step || 0) === 0 && (u.score || 0) === 0 && u.test_started_at) {
+          await db.prepare("UPDATE users SET test_started_at = NULL, test_submitted_at = NULL WHERE id = ?").run(u.id);
+          console.log(`[SELF-HEAL] Reset test timer for @${u.username} so they get full 60 minutes upon start.`);
+        }
+
+        healedCount++;
+      }
+    }
+    if (healedCount > 0) {
+      console.log(`[SELF-HEAL] Successfully verified and healed trajectories for ${healedCount} alumni.`);
+    }
+  } catch (err) {
+    console.error('[SELF-HEAL] Trajectory healing error:', err.message);
+  }
+}
+
+export async function assignPathToUser(userId, resetStep = true) {
   const pathLengthRow = await db.prepare("SELECT value FROM config WHERE key = 'path_length'").get();
   const pathLength = parseInt(pathLengthRow?.value || '12');
   
@@ -400,8 +464,8 @@ export async function assignPathToUser(userId) {
 
   // Anti-collusion: ensure consecutive enrolled alumni start on distinct nodes
   const startPool = [...foundationNodes, ...lateralNodes];
-  const startNodeIndex = (Number(userId) || 0) % startPool.length;
-  const startNode = startPool[startNodeIndex];
+  const startNodeIndex = (Number(userId) || 0) % (startPool.length || 1);
+  const startNode = startPool[startNodeIndex] || startPool[0];
 
   const s_fd = fyShuffle(foundationNodes.filter(id => id !== startNode));
   const s_lat = fyShuffle(lateralNodes.filter(id => id !== startNode));
@@ -465,7 +529,11 @@ export async function assignPathToUser(userId) {
   }
 
   const jsonPath = JSON.stringify(deduped);
-  await db.prepare("UPDATE users SET assigned_path_json = ?, current_step = 0 WHERE id = ?").run(jsonPath, userId);
+  if (resetStep) {
+    await db.prepare("UPDATE users SET assigned_path_json = ?, current_step = 0 WHERE id = ?").run(jsonPath, userId);
+  } else {
+    await db.prepare("UPDATE users SET assigned_path_json = ? WHERE id = ?").run(jsonPath, userId);
+  }
   return deduped;
 }
 

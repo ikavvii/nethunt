@@ -1,5 +1,5 @@
 import express from 'express';
-import { db, assignPathToUser, calculateNodePoints } from '../db.js';
+import { db, assignPathToUser, calculateNodePoints, validateAndRepairUserTrajectory } from '../db.js';
 import { requireAuth } from '../auth.js';
 import { broadcastEvent } from '../events.js';
 import { leaderboardCache } from '../leaderboardCache.js';
@@ -166,6 +166,9 @@ huntRouter.post('/start-test', requireAuth, async (req, res) => {
     }
   }
 
+  // Ensure user trajectory has valid nodes before starting test
+  await validateAndRepairUserTrajectory(user);
+
   if (!user.test_started_at) {
     await db.prepare('UPDATE users SET test_started_at = ? WHERE id = ?').run(now, user.id);
     user.test_started_at = now;
@@ -255,10 +258,25 @@ huntRouter.get('/current-node', requireAuth, async (req, res) => {
     });
   }
 
-  const nodeId = path[currentStep];
-  const node = await db.prepare('SELECT * FROM nodes WHERE id = ?').get(nodeId);
+  let nodeId = path[currentStep];
+  let node = await db.prepare('SELECT * FROM nodes WHERE id = ?').get(nodeId);
   if (!node) {
-    return res.status(404).json({ error: 'Assigned node unavailable' });
+    console.warn(`[AUTO-HEAL-RUNTIME] Missing node ${nodeId} for user ${user.id} (@${user.username}). Auto-repairing trajectory...`);
+    const repairedPath = await validateAndRepairUserTrajectory(user);
+    if (repairedPath && repairedPath.length > 0) {
+      path = repairedPath;
+      nodeId = path[currentStep] || path[0];
+      node = await db.prepare('SELECT * FROM nodes WHERE id = ?').get(nodeId);
+    }
+    if (!node) {
+      // Ultimate fallback: select first existing node in database
+      node = await db.prepare('SELECT * FROM nodes ORDER BY id ASC LIMIT 1').get();
+      if (node) nodeId = node.id;
+    }
+  }
+
+  if (!node) {
+    return res.status(503).json({ error: 'System puzzle nodes are initializing. Please refresh.' });
   }
 
   let progress = await db.prepare(`
@@ -422,10 +440,19 @@ huntRouter.post('/submit', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'All assigned nodes are completed.' });
   }
 
-  const nodeId = path[currentStep];
-  const node = await db.prepare('SELECT * FROM nodes WHERE id = ?').get(nodeId);
+  let nodeId = path[currentStep];
+  let node = await db.prepare('SELECT * FROM nodes WHERE id = ?').get(nodeId);
   if (!node) {
-    return res.status(404).json({ error: 'Node reference error.' });
+    console.warn(`[AUTO-HEAL-RUNTIME] Missing node ${nodeId} in /submit for user ${user.id}. Repairing trajectory...`);
+    const repairedPath = await validateAndRepairUserTrajectory(user);
+    if (repairedPath && repairedPath.length > 0) {
+      path = repairedPath;
+      nodeId = path[currentStep] || path[0];
+      node = await db.prepare('SELECT * FROM nodes WHERE id = ?').get(nodeId);
+    }
+  }
+  if (!node) {
+    return res.status(404).json({ error: 'Node reference error. Please refresh your browser.' });
   }
 
   const progress = await db.prepare(`
@@ -600,8 +627,21 @@ huntRouter.post('/unlock-hint', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'No active node.' });
   }
 
-  const nodeId = path[currentStep];
-  const node = await db.prepare('SELECT * FROM nodes WHERE id = ?').get(nodeId);
+  let nodeId = path[currentStep];
+  let node = await db.prepare('SELECT * FROM nodes WHERE id = ?').get(nodeId);
+  if (!node) {
+    console.warn(`[AUTO-HEAL-RUNTIME] Missing node ${nodeId} in /hint for user ${user.id}. Repairing trajectory...`);
+    const repairedPath = await validateAndRepairUserTrajectory(user);
+    if (repairedPath && repairedPath.length > 0) {
+      path = repairedPath;
+      nodeId = path[currentStep] || path[0];
+      node = await db.prepare('SELECT * FROM nodes WHERE id = ?').get(nodeId);
+    }
+  }
+  if (!node) {
+    return res.status(404).json({ error: 'Active node unavailable. Please refresh.' });
+  }
+
   let hints = [];
   try { hints = JSON.parse(node.hints_json || '[]'); } catch (e) {}
 
