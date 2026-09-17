@@ -1,3 +1,5 @@
+process.env.TZ = 'Asia/Kolkata';
+
 import express from 'express';
 import cors from 'cors';
 import path from 'node:path';
@@ -32,16 +34,25 @@ app.get('/api/events/stream', registerSSEClient);
 
 function formatEventWindow(startInput, endInput) {
   try {
-    const s = new Date(startInput);
-    const e = new Date(endInput);
-    if (isNaN(s.getTime()) || isNaN(e.getTime())) return `${startInput} – ${endInput}`;
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const pad = (n) => String(n).padStart(2, '0');
-    const sHours = s.getHours() % 12 || 12;
-    const sAm = s.getHours() >= 12 ? 'PM' : 'AM';
-    const eHours = e.getHours() % 12 || 12;
-    const eAm = e.getHours() >= 12 ? 'PM' : 'AM';
-    return `${s.getDate()} ${months[s.getMonth()]} ${s.getFullYear()} (${pad(sHours)}:${pad(s.getMinutes())} ${sAm}) – ${e.getDate()} ${months[e.getMonth()]} ${e.getFullYear()} (${pad(eHours)}:${pad(e.getMinutes())} ${eAm})`;
+    const fmt = (input) => {
+      const d = new Date(input);
+      if (isNaN(d.getTime())) return input;
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Kolkata',
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      }).formatToParts(d);
+      const map = {};
+      for (const p of parts) map[p.type] = p.value;
+      const hourPad = String(map.hour).padStart(2, '0');
+      const dayPeriod = (map.dayPeriod || 'AM').toUpperCase();
+      return `${map.day} ${map.month} ${map.year} (${hourPad}:${map.minute} ${dayPeriod})`;
+    };
+    return `${fmt(startInput)} – ${fmt(endInput)}`;
   } catch (err) {
     return `${startInput} – ${endInput}`;
   }

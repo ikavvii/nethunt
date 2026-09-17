@@ -151,11 +151,28 @@ export default function AdminDashboard() {
     }
   };
 
-  // Schedule configuration state
+  // Schedule configuration state (anchored strictly to Asia/Kolkata IST)
   const toDatetimeLocal = (isoStr) => {
     if (!isoStr) return '';
-    const clean = isoStr.split('+')[0].split('Z')[0];
-    return clean.slice(0, 16);
+    try {
+      const d = new Date(isoStr);
+      if (isNaN(d.getTime())) return '';
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      }).formatToParts(d);
+      const map = {};
+      for (const p of parts) map[p.type] = p.value;
+      return `${map.year}-${map.month}-${map.day}T${map.hour}:${map.minute}`;
+    } catch (e) {
+      const clean = isoStr.split('+')[0].split('Z')[0];
+      return clean.slice(0, 16);
+    }
   };
 
   const toISTIso = (localStr) => {

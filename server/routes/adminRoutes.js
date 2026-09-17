@@ -671,11 +671,21 @@ adminRouter.post('/config', async (req, res) => {
   }
   if (path_length) await setConfig.run('path_length', String(path_length));
   if (test_duration_minutes) await setConfig.run('test_duration_minutes', String(test_duration_minutes));
-  if (event_start_date) await setConfig.run('event_start_date', String(event_start_date));
+  if (event_start_date) {
+    let cleanStart = String(event_start_date).trim();
+    if (!cleanStart.includes('+') && !cleanStart.endsWith('Z')) {
+      cleanStart = cleanStart.length === 16 ? `${cleanStart}:00+05:30` : `${cleanStart}+05:30`;
+    }
+    await setConfig.run('event_start_date', cleanStart);
+  }
   if (event_end_date) {
-    await setConfig.run('event_end_date', String(event_end_date));
+    let cleanEnd = String(event_end_date).trim();
+    if (!cleanEnd.includes('+') && !cleanEnd.endsWith('Z')) {
+      cleanEnd = cleanEnd.length === 16 ? `${cleanEnd}:00+05:30` : `${cleanEnd}+05:30`;
+    }
+    await setConfig.run('event_end_date', cleanEnd);
     try {
-      const endMs = new Date(event_end_date).getTime();
+      const endMs = new Date(cleanEnd).getTime();
       if (!isNaN(endMs)) {
         await setConfig.run('event_end_time', String(endMs));
       }
