@@ -433,6 +433,14 @@ export async function healAllUserTrajectories() {
 
         healedCount++;
       }
+
+      // Auto-rescue any alumnus whose test expired with 0 score and 0 steps (e.g. stuck during earlier initialization bug)
+      const startedMs = Number(u.test_started_at);
+      const isExpired = startedMs && (Date.now() - startedMs > 60 * 60 * 1000);
+      if ((u.current_step || 0) === 0 && (u.score || 0) === 0 && isExpired) {
+        await db.prepare("UPDATE users SET test_started_at = NULL, test_submitted_at = NULL WHERE id = ?").run(u.id);
+        console.log(`[SELF-HEAL] Rescued locked-out alumnus @${u.username}: timer reset to NULL for fresh start.`);
+      }
     }
     if (healedCount > 0) {
       console.log(`[SELF-HEAL] Successfully verified and healed trajectories for ${healedCount} alumni.`);

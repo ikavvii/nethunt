@@ -123,12 +123,15 @@ export default function HuntArena({ onOpenAuth, onNavigateToLeaderboard }) {
   useEffect(() => {
     if (currentNodeData?.timeRemainingSeconds !== undefined) {
       setTimeRemaining(currentNodeData.timeRemainingSeconds);
+    } else if (!currentNodeData?.testStarted) {
+      setTimeRemaining((currentNodeData?.totalDurationMinutes || 60) * 60);
     }
-  }, [currentNodeData?.timeRemainingSeconds]);
+  }, [currentNodeData?.timeRemainingSeconds, currentNodeData?.testStarted, currentNodeData?.totalDurationMinutes]);
 
-  // Local 1-second countdown tick
+  // Local 1-second countdown tick (STRICTLY runs ONLY when test is active/started)
   useEffect(() => {
-    if (timeRemaining === null || timeRemaining === undefined) return;
+    // If test is not started yet, DO NOT TICK (timer only starts AFTER clicking "Start Test")
+    if (!currentNodeData?.testStarted || timeRemaining === null || timeRemaining === undefined) return;
     if (timeRemaining <= 0) {
       if (currentNodeData?.testStarted && !currentNodeData?.isTimeExpired) {
         fetchCurrentNode();

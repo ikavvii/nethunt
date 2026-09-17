@@ -258,6 +258,28 @@ huntRouter.get('/current-node', requireAuth, async (req, res) => {
     });
   }
 
+  // If the participant has not started the test yet, strictly withhold the puzzle clue and do not start timer
+  if (user.role !== 'admin' && !timerState.testStarted) {
+    return res.json({
+      completed: false,
+      currentStep,
+      totalSteps,
+      score: user.score,
+      tabViolations: user.tab_violations || 0,
+      eventStatus,
+      eventStartDate: startDateStr,
+      eventEndDate: endDateStr,
+      isBeforeEventStart,
+      isAfterEventEnd,
+      timeUntilStartSeconds,
+      testStarted: false,
+      testStartedAt: null,
+      totalDurationMinutes: timerState.totalDurationMinutes,
+      timeRemainingSeconds: timerState.totalDurationMinutes * 60,
+      isTimeExpired: false
+    });
+  }
+
   let nodeId = path[currentStep];
   let node = await db.prepare('SELECT * FROM nodes WHERE id = ?').get(nodeId);
   if (!node) {
