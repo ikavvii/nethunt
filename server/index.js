@@ -65,7 +65,7 @@ app.get('/api/events/status', async (req, res) => {
     const lbRow = await db.prepare("SELECT value FROM config WHERE key = 'leaderboard_visible'").get();
     const lbVisible = (!lbRow || lbRow.value === undefined || lbRow.value === null) ? true : (lbRow.value === 'true' || lbRow.value === '1');
     const startDate = (await db.prepare("SELECT value FROM config WHERE key = 'event_start_date'").get())?.value || '2026-09-12T09:00:00+05:30';
-    const endDate = (await db.prepare("SELECT value FROM config WHERE key = 'event_end_date'").get())?.value || '2026-09-18T09:00:00+05:30';
+    const endDate = (await db.prepare("SELECT value FROM config WHERE key = 'event_end_date'").get())?.value || '2026-09-19T10:00:00+05:30';
     
     const now = Date.now();
     const startMs = new Date(startDate).getTime();

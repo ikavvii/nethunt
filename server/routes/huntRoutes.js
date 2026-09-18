@@ -143,7 +143,7 @@ huntRouter.post('/start-test', requireAuth, async (req, res) => {
 
   const now = Date.now();
   const startDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_start_date'").get())?.value || '2026-09-12T09:00:00+05:30';
-  const endDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_end_date'").get())?.value || '2026-09-18T09:00:00+05:30';
+  const endDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_end_date'").get())?.value || '2026-09-19T10:00:00+05:30';
 
   if (user.role !== 'admin') {
     const startMs = new Date(startDateStr).getTime();
@@ -222,7 +222,7 @@ huntRouter.get('/current-node', requireAuth, async (req, res) => {
 
   const eventStatus = (await db.prepare("SELECT value FROM config WHERE key = 'event_status'").get())?.value || 'active';
   const startDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_start_date'").get())?.value || '2026-09-12T09:00:00+05:30';
-  const endDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_end_date'").get())?.value || '2026-09-18T09:00:00+05:30';
+  const endDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_end_date'").get())?.value || '2026-09-19T10:00:00+05:30';
   const now = Date.now();
   const startMs = new Date(startDateStr).getTime();
   const endMs = new Date(endDateStr).getTime();
@@ -390,7 +390,7 @@ huntRouter.post('/submit', requireAuth, async (req, res) => {
 
   const now = Date.now();
   const startDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_start_date'").get())?.value || '2026-09-12T09:00:00+05:30';
-  const endDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_end_date'").get())?.value || '2026-09-18T09:00:00+05:30';
+  const endDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_end_date'").get())?.value || '2026-09-19T10:00:00+05:30';
 
   if (user.role !== 'admin') {
     const startMs = new Date(startDateStr).getTime();
@@ -602,7 +602,7 @@ huntRouter.post('/unlock-hint', requireAuth, async (req, res) => {
 
   const now = Date.now();
   const startDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_start_date'").get())?.value || '2026-09-12T09:00:00+05:30';
-  const endDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_end_date'").get())?.value || '2026-09-18T09:00:00+05:30';
+  const endDateStr = (await db.prepare("SELECT value FROM config WHERE key = 'event_end_date'").get())?.value || '2026-09-19T10:00:00+05:30';
 
   if (user.role !== 'admin') {
     const startMs = new Date(startDateStr).getTime();

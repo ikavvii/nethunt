@@ -2515,7 +2515,7 @@ export default function AdminDashboard() {
                     required
                   />
                   <p className="text-[10px] theme-text-muted">
-                    Current End: <span className="font-bold theme-text-primary">{config.event_end_date || '2026-09-18T09:00:00+05:30'}</span>
+                    Current End: <span className="font-bold theme-text-primary">{config.event_end_date || '2026-09-19T10:00:00+05:30'}</span>
                   </p>
                 </div>
               </div>

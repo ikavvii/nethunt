@@ -24,7 +24,7 @@ export default function TestStartBriefing({
   isAfterEventEnd = false,
   timeUntilStartSeconds = 0,
   eventStartDate = '2026-09-12T09:00:00+05:30',
-  eventEndDate = '2026-09-18T09:00:00+05:30'
+  eventEndDate = '2026-09-19T10:00:00+05:30'
 }) {
   const [acknowledged, setAcknowledged] = useState(false);
   const [countdownSecs, setCountdownSecs] = useState(timeUntilStartSeconds || 0);
